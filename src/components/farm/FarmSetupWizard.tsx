@@ -1,13 +1,22 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wheat, Leaf, Droplets, ArrowRight, ArrowLeft, Check, User } from 'lucide-react';
+import { Wheat, Leaf, Droplets, ArrowRight, ArrowLeft, Check, User, Mountain, CircleDot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SoilType, IrrigationSource } from '@/contexts/FarmContext';
 
 interface FarmSetupWizardProps {
-  onComplete: (cropType: string, fieldSize: number, tankCapacity: number, farmerName: string) => void;
+  onComplete: (params: {
+    cropType: string;
+    fieldSize: number;
+    farmerName: string;
+    soilType: SoilType;
+    irrigationSource: IrrigationSource;
+    tankCapacity?: number;
+    flowRate?: number;
+  }) => void;
 }
 
 const CROP_OPTIONS = [
@@ -16,15 +25,32 @@ const CROP_OPTIONS = [
   { value: 'tomato', label: 'Tomato', icon: Leaf, waterNeed: '6 mm/day' },
 ];
 
+const SOIL_OPTIONS = [
+  { value: 'sandy', label: 'Sandy', description: 'Fast drainage, low water retention' },
+  { value: 'clay', label: 'Clay', description: 'Slow drainage, high water retention' },
+  { value: 'loam', label: 'Loam', description: 'Balanced drainage and retention' },
+  { value: 'black', label: 'Black (Cotton)', description: 'High moisture retention, cracks when dry' },
+];
+
+const IRRIGATION_OPTIONS = [
+  { value: 'tank', label: 'Water Tank', icon: Droplets, description: 'Fixed capacity storage' },
+  { value: 'borewell', label: 'Borewell', icon: CircleDot, description: 'Groundwater with pump' },
+];
+
 const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
   const [step, setStep] = useState(1);
   const [farmerName, setFarmerName] = useState('');
   const [cropType, setCropType] = useState('');
+  const [soilType, setSoilType] = useState<SoilType | ''>('');
   const [fieldSize, setFieldSize] = useState('');
+  const [irrigationSource, setIrrigationSource] = useState<IrrigationSource | ''>('');
   const [tankCapacity, setTankCapacity] = useState('');
+  const [flowRate, setFlowRate] = useState('');
+
+  const totalSteps = 6;
 
   const handleNext = () => {
-    if (step < 4) setStep(step + 1);
+    if (step < totalSteps) setStep(step + 1);
   };
 
   const handleBack = () => {
@@ -32,25 +58,34 @@ const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
   };
 
   const handleComplete = () => {
-    onComplete(
+    onComplete({
       cropType,
-      parseFloat(fieldSize) || 10,
-      parseFloat(tankCapacity) || 50000,
-      farmerName || 'Farmer'
-    );
+      fieldSize: parseFloat(fieldSize) || 10,
+      farmerName: farmerName || 'Farmer',
+      soilType: soilType as SoilType,
+      irrigationSource: irrigationSource as IrrigationSource,
+      tankCapacity: irrigationSource === 'tank' ? parseFloat(tankCapacity) || 50000 : undefined,
+      flowRate: irrigationSource === 'borewell' ? parseFloat(flowRate) || 5000 : undefined,
+    });
   };
 
   const isStepValid = () => {
     switch (step) {
       case 1: return farmerName.trim().length > 0;
       case 2: return cropType !== '';
-      case 3: return fieldSize !== '' && parseFloat(fieldSize) > 0;
-      case 4: return tankCapacity !== '' && parseFloat(tankCapacity) > 0;
+      case 3: return soilType !== '';
+      case 4: return fieldSize !== '' && parseFloat(fieldSize) > 0;
+      case 5: return irrigationSource !== '';
+      case 6:
+        if (irrigationSource === 'tank') return tankCapacity !== '' && parseFloat(tankCapacity) > 0;
+        if (irrigationSource === 'borewell') return flowRate !== '' && parseFloat(flowRate) > 0;
+        return false;
       default: return false;
     }
   };
 
   const selectedCrop = CROP_OPTIONS.find(c => c.value === cropType);
+  const selectedSoil = SOIL_OPTIONS.find(s => s.value === soilType);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -61,7 +96,7 @@ const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
       >
         {/* Progress Indicator */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {[1, 2, 3, 4].map((s) => (
+          {Array.from({ length: totalSteps }, (_, i) => i + 1).map((s) => (
             <div
               key={s}
               className={`h-2 rounded-full transition-all duration-300 ${
@@ -145,6 +180,44 @@ const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
             {step === 3 && (
               <div className="space-y-6">
                 <div className="text-center">
+                  <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Mountain className="w-8 h-8 text-amber-600" />
+                  </div>
+                  <h2 className="text-2xl font-display font-bold text-foreground">Soil Type</h2>
+                  <p className="text-muted-foreground mt-2">This affects irrigation scheduling</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Select Soil Type</Label>
+                  <Select value={soilType} onValueChange={(v) => setSoilType(v as SoilType)}>
+                    <SelectTrigger className="glass-input h-12">
+                      <SelectValue placeholder="Select soil type" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border border-border">
+                      {SOIL_OPTIONS.map((soil) => (
+                        <SelectItem key={soil.value} value={soil.value}>
+                          <div className="flex flex-col">
+                            <span className="font-medium">{soil.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedSoil && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-sm text-muted-foreground mt-2"
+                    >
+                      {selectedSoil.description}
+                    </motion.p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="space-y-6">
+                <div className="text-center">
                   <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                     <div className="w-8 h-8 border-2 border-primary rounded" />
                   </div>
@@ -165,14 +238,47 @@ const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
               </div>
             )}
 
-            {step === 4 && (
+            {step === 5 && (
               <div className="space-y-6">
                 <div className="text-center">
                   <div className="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Droplets className="w-8 h-8 text-secondary" />
                   </div>
                   <h2 className="text-2xl font-display font-bold text-foreground">Water Source</h2>
-                  <p className="text-muted-foreground mt-2">What's your total water tank capacity?</p>
+                  <p className="text-muted-foreground mt-2">How do you irrigate your fields?</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {IRRIGATION_OPTIONS.map((option) => (
+                    <motion.button
+                      key={option.value}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setIrrigationSource(option.value as IrrigationSource)}
+                      className={`p-4 rounded-2xl border-2 transition-all ${
+                        irrigationSource === option.value
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border bg-card hover:border-primary/50'
+                      }`}
+                    >
+                      <option.icon className={`w-8 h-8 mx-auto mb-2 ${
+                        irrigationSource === option.value ? 'text-primary' : 'text-muted-foreground'
+                      }`} />
+                      <p className="font-medium text-foreground">{option.label}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{option.description}</p>
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {step === 6 && irrigationSource === 'tank' && (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-secondary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Droplets className="w-8 h-8 text-secondary" />
+                  </div>
+                  <h2 className="text-2xl font-display font-bold text-foreground">Tank Capacity</h2>
+                  <p className="text-muted-foreground mt-2">What's your total water storage?</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="tankCapacity">Tank Capacity (Liters)</Label>
@@ -196,6 +302,38 @@ const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
                 </div>
               </div>
             )}
+
+            {step === 6 && irrigationSource === 'borewell' && (
+              <div className="space-y-6">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <CircleDot className="w-8 h-8 text-blue-500" />
+                  </div>
+                  <h2 className="text-2xl font-display font-bold text-foreground">Pump Flow Rate</h2>
+                  <p className="text-muted-foreground mt-2">How fast does your pump deliver water?</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="flowRate">Flow Rate (Liters/Hour)</Label>
+                  <Input
+                    id="flowRate"
+                    type="number"
+                    placeholder="e.g., 5000"
+                    value={flowRate}
+                    onChange={(e) => setFlowRate(e.target.value)}
+                    className="glass-input h-12"
+                  />
+                  {flowRate && (
+                    <motion.p
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="text-sm text-muted-foreground mt-2"
+                    >
+                      {(parseFloat(flowRate) / 1000).toFixed(1)} m³/hour
+                    </motion.p>
+                  )}
+                </div>
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
 
@@ -211,7 +349,7 @@ const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
             Back
           </Button>
 
-          {step < 4 ? (
+          {step < totalSteps ? (
             <Button
               onClick={handleNext}
               disabled={!isStepValid()}

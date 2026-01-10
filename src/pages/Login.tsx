@@ -24,8 +24,16 @@ const Login = () => {
     }
   };
 
-  const handleSetupComplete = (cropType: string, fieldSize: number, tankCapacity: number, farmerName: string) => {
-    completeFarmSetup(cropType, fieldSize, tankCapacity, farmerName);
+  const handleSetupComplete = (params: {
+    cropType: string;
+    fieldSize: number;
+    farmerName: string;
+    soilType: 'sandy' | 'clay' | 'loam' | 'black';
+    irrigationSource: 'tank' | 'borewell';
+    tankCapacity?: number;
+    flowRate?: number;
+  }) => {
+    completeFarmSetup(params);
     setShowWizard(false);
     navigate('/dashboard');
   };

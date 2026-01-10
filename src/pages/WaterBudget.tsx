@@ -2,20 +2,41 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import WaterTankVisualization from '@/components/farm/WaterTankVisualization';
+import BorewellMonitor from '@/components/farm/BorewellMonitor';
 import { useFarm } from '@/contexts/FarmContext';
-import { TrendingUp, Droplets, Target, Calendar } from 'lucide-react';
+import { TrendingUp, Droplets, Target } from 'lucide-react';
 
 const WaterBudget = () => {
-  const { farmData, getWaterBudgetStatus, getRemainingDays } = useFarm();
+  const { farmData, getWaterBudgetStatus, getRemainingDays, getTotalPumped } = useFarm();
 
   const budgetStatus = getWaterBudgetStatus();
-  const remaining = farmData.tankCapacity - farmData.usedWater;
-  const percentageUsed = (farmData.usedWater / farmData.tankCapacity) * 100;
+  const isBorewell = farmData.irrigationSource === 'borewell';
+  
+  // Calculate values based on irrigation source
+  const remaining = isBorewell 
+    ? 0 // Borewell doesn't have remaining
+    : farmData.tankCapacity - farmData.usedWater;
+  
+  const totalUsed = isBorewell ? getTotalPumped() : farmData.usedWater;
+  const percentageUsed = isBorewell 
+    ? (farmData.pumpRunTime / 8) * 100 // Based on 8hr max daily runtime
+    : (farmData.usedWater / farmData.tankCapacity) * 100;
   
   // Calculate savings (simulated - compared to traditional irrigation)
-  const traditionalUsage = farmData.usedWater * 1.4; // 40% more water traditionally
-  const waterSaved = traditionalUsage - farmData.usedWater;
-  const efficiencyScore = Math.min(100, Math.round((1 - (farmData.usedWater / traditionalUsage)) * 100 + 50));
+  const traditionalUsage = totalUsed * 1.4; // 40% more water traditionally
+  const waterSaved = traditionalUsage - totalUsed;
+  const efficiencyScore = Math.min(100, Math.round((1 - (totalUsed / traditionalUsage)) * 100 + 50));
+
+  const getBudgetMessage = () => {
+    if (isBorewell) {
+      if (budgetStatus === 'high') return '✓ Efficient Pumping';
+      if (budgetStatus === 'medium') return '⚡ Moderate Usage';
+      return '⚠️ High Runtime - Conserve';
+    }
+    if (budgetStatus === 'high') return '✓ Healthy Budget';
+    if (budgetStatus === 'medium') return '⚡ Moderate - Plan Ahead';
+    return '⚠️ Low - Conserve Water';
+  };
 
   return (
     <DashboardLayout>
@@ -27,7 +48,9 @@ const WaterBudget = () => {
         >
           <h1 className="text-3xl font-display font-bold text-foreground">Water Budget</h1>
           <p className="text-muted-foreground mt-1">
-            Track and optimize your water resource usage
+            {isBorewell 
+              ? 'Track and optimize your groundwater usage' 
+              : 'Track and optimize your water resource usage'}
           </p>
         </motion.div>
 
@@ -48,31 +71,43 @@ const WaterBudget = () => {
                 budgetStatus === 'high' ? 'text-success' :
                 budgetStatus === 'medium' ? 'text-warning' : 'text-destructive'
               }`}>
-                {budgetStatus === 'high' ? '✓ Healthy Budget' :
-                 budgetStatus === 'medium' ? '⚡ Moderate - Plan Ahead' : '⚠️ Low - Conserve Water'}
+                {getBudgetMessage()}
               </h2>
             </div>
             <div className="text-right">
-              <p className="text-sm text-muted-foreground">Days Remaining</p>
-              <p className="text-3xl font-display font-bold text-foreground">{getRemainingDays()}</p>
+              <p className="text-sm text-muted-foreground">
+                {isBorewell ? 'Efficiency Score' : 'Days Remaining'}
+              </p>
+              <p className="text-3xl font-display font-bold text-foreground">
+                {isBorewell ? `${efficiencyScore}%` : getRemainingDays()}
+              </p>
             </div>
           </div>
         </motion.div>
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Water Tank */}
+          {/* Water Source Visualization */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
-            <WaterTankVisualization
-              totalCapacity={farmData.tankCapacity}
-              usedWater={farmData.usedWater}
-              dailyNeed={farmData.dailyWaterNeed}
-              fieldSize={farmData.fieldSize}
-            />
+            {isBorewell ? (
+              <BorewellMonitor
+                flowRate={farmData.flowRate}
+                pumpRunTime={farmData.pumpRunTime}
+                dailyNeed={farmData.dailyWaterNeed}
+                fieldSize={farmData.fieldSize}
+              />
+            ) : (
+              <WaterTankVisualization
+                totalCapacity={farmData.tankCapacity}
+                usedWater={farmData.usedWater}
+                dailyNeed={farmData.dailyWaterNeed}
+                fieldSize={farmData.fieldSize}
+              />
+            )}
           </motion.div>
 
           {/* Analysis Cards */}
@@ -89,7 +124,9 @@ const WaterBudget = () => {
                   <Droplets className="w-6 h-6 text-success" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Water Saved</p>
+                  <p className="text-sm text-muted-foreground">
+                    {isBorewell ? 'Groundwater Saved' : 'Water Saved'}
+                  </p>
                   <p className="text-2xl font-display font-bold text-success">
                     {(waterSaved / 1000).toFixed(1)} m³
                   </p>
@@ -97,9 +134,19 @@ const WaterBudget = () => {
               </div>
               <div className="bg-success/10 rounded-xl p-4">
                 <p className="text-sm text-muted-foreground">
-                  Compared to traditional irrigation schedules, you've saved approximately{' '}
-                  <span className="font-bold text-success">{waterSaved.toLocaleString()} liters</span>{' '}
-                  by skipping unnecessary irrigation cycles.
+                  {isBorewell ? (
+                    <>
+                      Compared to traditional pumping schedules, you've saved approximately{' '}
+                      <span className="font-bold text-success">{waterSaved.toLocaleString()} liters</span>{' '}
+                      of groundwater by optimizing pump runtime.
+                    </>
+                  ) : (
+                    <>
+                      Compared to traditional irrigation schedules, you've saved approximately{' '}
+                      <span className="font-bold text-success">{waterSaved.toLocaleString()} liters</span>{' '}
+                      by skipping unnecessary irrigation cycles.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
@@ -128,7 +175,9 @@ const WaterBudget = () => {
                 />
               </div>
               <p className="text-sm text-muted-foreground mt-3">
-                Score based on water budget adherence and optimal irrigation timing.
+                {isBorewell 
+                  ? 'Score based on pump runtime efficiency and optimal scheduling.'
+                  : 'Score based on water budget adherence and optimal irrigation timing.'}
               </p>
             </div>
 
@@ -148,25 +197,39 @@ const WaterBudget = () => {
 
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Used</span>
-                  <span className="font-medium">{(farmData.usedWater / 1000).toFixed(1)} m³</span>
+                  <span className="text-muted-foreground">
+                    {isBorewell ? 'Total Pumped' : 'Total Used'}
+                  </span>
+                  <span className="font-medium">{(totalUsed / 1000).toFixed(1)} m³</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Remaining</span>
-                  <span className="font-medium text-secondary">{(remaining / 1000).toFixed(1)} m³</span>
-                </div>
+                {!isBorewell && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Remaining</span>
+                    <span className="font-medium text-secondary">{(remaining / 1000).toFixed(1)} m³</span>
+                  </div>
+                )}
+                {isBorewell && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Pump Runtime</span>
+                    <span className="font-medium text-secondary">{farmData.pumpRunTime.toFixed(1)} hrs</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground">Usage Rate</span>
                   <span className="font-medium">{percentageUsed.toFixed(1)}%</span>
                 </div>
                 <div className="h-px bg-border my-2" />
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Est. Refill Date</span>
-                  <span className="font-medium text-foreground">
-                    {new Date(Date.now() + getRemainingDays() * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
+                  <span className="text-muted-foreground">
+                    {isBorewell ? 'Soil Type' : 'Est. Refill Date'}
+                  </span>
+                  <span className="font-medium text-foreground capitalize">
+                    {isBorewell 
+                      ? farmData.soilType
+                      : new Date(Date.now() + getRemainingDays() * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                        })}
                   </span>
                 </div>
               </div>
