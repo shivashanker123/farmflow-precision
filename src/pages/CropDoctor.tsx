@@ -48,6 +48,9 @@ const CropDoctor = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* AI Crop Consultant Chat */}
+        <ChatWidget />
+
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -58,9 +61,6 @@ const CropDoctor = () => {
             AI-powered crop health analysis and recommendations
           </p>
         </motion.div>
-
-        {/* AI Crop Consultant Chat */}
-        <ChatWidget />
 
         {/* Health Status Card */}
         <motion.div
