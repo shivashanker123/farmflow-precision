@@ -59,6 +59,9 @@ const CropDoctor = () => {
           </p>
         </motion.div>
 
+        {/* AI Crop Consultant Chat */}
+        <ChatWidget />
+
         {/* Health Status Card */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -143,9 +146,6 @@ const CropDoctor = () => {
             </div>
           ))}
         </motion.div>
-
-        {/* AI Crop Consultant Chat */}
-        <ChatWidget />
       </div>
     </DashboardLayout>
   );
