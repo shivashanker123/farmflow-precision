@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Volume2, VolumeX, Send, Bot, User, Loader2, Sparkles } from 'lucide-react';
+import { Mic, MicOff, Volume2, VolumeX, Send, Bot, User, Loader2, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFarm } from '@/contexts/FarmContext';
 
@@ -34,8 +34,10 @@ const ChatWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -45,10 +47,18 @@ const ChatWidget = () => {
     scrollToBottom();
   }, [messages]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+    }
+  }, [inputValue]);
+
   // Initialize Speech Recognition
   useEffect(() => {
     const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
+
     if (SpeechRecognitionAPI) {
       recognitionRef.current = new SpeechRecognitionAPI();
       recognitionRef.current.continuous = false;
@@ -77,6 +87,17 @@ const ChatWidget = () => {
     };
   }, []);
 
+  // Handle escape key to exit fullscreen
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isExpanded) {
+        setIsExpanded(false);
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isExpanded]);
+
   const toggleListening = () => {
     if (!recognitionRef.current) {
       alert('Speech recognition is not supported in your browser.');
@@ -94,7 +115,7 @@ const ChatWidget = () => {
 
   const speakText = (text: string) => {
     if (!isSpeakerEnabled) return;
-    
+
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
@@ -111,6 +132,74 @@ const ChatWidget = () => {
       .replace('{crop}', farmData.cropType);
   };
 
+  // Ollama API configuration
+  const OLLAMA_API_URL = 'http://localhost:11434/api/chat';
+  const OLLAMA_MODEL = 'llama3.2:latest';
+
+  // Create system context for the AI
+  const getSystemPrompt = () => {
+    return `You are an expert AI Crop Consultant for FarmFlow, a precision agriculture platform. 
+You help farmers optimize their irrigation and crop management.
+
+Current Farm Data:
+- Crop Type: ${farmData.cropType}
+- Soil Moisture: ${farmData.soilMoisture}%
+- Field Size: ${farmData.fieldSize} acres
+- Daily Water Need: ${farmData.dailyWaterNeed} mm
+- Pump Status: ${farmData.pumpActive ? 'Running' : 'Off'}
+
+Optimal moisture range for ${farmData.cropType}: 50-70%
+
+Provide helpful, concise advice based on this data. Be friendly and professional.
+Keep responses under 3 sentences unless the user asks for detailed information.`;
+  };
+
+  // Call Ollama API using /api/chat endpoint
+  const callOllamaAPI = async (userPrompt: string): Promise<string> => {
+    try {
+      console.log('Calling Ollama API with model:', OLLAMA_MODEL);
+
+      const response = await fetch(OLLAMA_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: OLLAMA_MODEL,
+          messages: [
+            {
+              role: 'system',
+              content: getSystemPrompt(),
+            },
+            {
+              role: 'user',
+              content: userPrompt,
+            },
+          ],
+          stream: false,
+        }),
+      });
+
+      console.log('Ollama response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Ollama API error response:', errorText);
+        throw new Error(`Ollama API error: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Ollama response data:', data);
+
+      // /api/chat returns response in data.message.content
+      return data.message?.content || data.response || 'I apologize, but I could not generate a response. Please try again.';
+    } catch (error) {
+      console.error('Ollama API error:', error);
+      // Fallback to mock response if Ollama is unavailable
+      return getMockResponse() + '\n\n(Note: Using offline mode - Ollama not available)';
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
@@ -122,23 +211,35 @@ const ChatWidget = () => {
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const userQuery = inputValue.trim();
     setInputValue('');
     setIsLoading(true);
 
-    // Simulate AI response after 1 second delay
-    setTimeout(() => {
-      const aiResponse = getMockResponse();
+    try {
+      // Call Ollama API for real AI response
+      const aiResponse = await callOllamaAPI(userQuery);
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: aiResponse,
         timestamp: new Date(),
       };
-      
+
       setMessages((prev) => [...prev, assistantMessage]);
-      setIsLoading(false);
       speakText(aiResponse);
-    }, 1000);
+    } catch (error) {
+      console.error('Error getting AI response:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'I apologize, but I encountered an error. Please make sure Ollama is running and try again.',
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -149,186 +250,223 @@ const ChatWidget = () => {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.4 }}
-      className="glass-card p-6 hover-lift"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h3 className="text-lg font-display font-bold text-foreground">AI Crop Consultant</h3>
-            <p className="text-xs text-muted-foreground">Powered by FarmFlow Intelligence</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <motion.div
-            animate={{ scale: [1, 1.2, 1] }}
-            transition={{ repeat: Infinity, duration: 2 }}
-            className="w-2 h-2 rounded-full bg-success"
-          />
-          <span className="text-xs text-muted-foreground">Online</span>
-        </div>
-      </div>
-
-      {/* Messages Area */}
-      <div className="h-80 overflow-y-auto mb-4 pr-2 space-y-4 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent">
-        <AnimatePresence>
-          {messages.map((message) => (
-            <motion.div
-              key={message.id}
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-              className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  message.role === 'assistant'
-                    ? 'bg-gradient-to-br from-primary to-secondary'
-                    : 'bg-gradient-to-br from-secondary to-water'
-                }`}
-              >
-                {message.role === 'assistant' ? (
-                  <Bot className="w-4 h-4 text-white" />
-                ) : (
-                  <User className="w-4 h-4 text-white" />
-                )}
-              </div>
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-3 ${
-                  message.role === 'assistant'
-                    ? 'bg-muted/50 backdrop-blur-sm border border-border/50'
-                    : 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground'
-                }`}
-              >
-                <p className="text-sm leading-relaxed">{message.content}</p>
-                <p
-                  className={`text-[10px] mt-1 ${
-                    message.role === 'assistant' ? 'text-muted-foreground' : 'text-primary-foreground/70'
-                  }`}
-                >
-                  {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-
-        {/* Loading indicator */}
-        {isLoading && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex gap-3"
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
-              <Bot className="w-4 h-4 text-white" />
-            </div>
-            <div className="bg-muted/50 backdrop-blur-sm border border-border/50 rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                <span className="text-sm text-muted-foreground">Analyzing your farm data...</span>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input Area */}
-      <div className="flex items-center gap-2">
-        {/* Microphone Button */}
-        <motion.div whileTap={{ scale: 0.95 }}>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={toggleListening}
-            className={`rounded-xl transition-all duration-300 ${
-              isListening
-                ? 'bg-destructive/10 border-destructive text-destructive animate-pulse'
-                : 'hover:bg-primary/10 hover:border-primary hover:text-primary'
-            }`}
-          >
-            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          </Button>
-        </motion.div>
-
-        {/* Speaker Toggle */}
-        <motion.div whileTap={{ scale: 0.95 }}>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setIsSpeakerEnabled(!isSpeakerEnabled)}
-            className={`rounded-xl transition-all duration-300 ${
-              isSpeakerEnabled
-                ? 'bg-primary/10 border-primary text-primary'
-                : 'hover:bg-primary/10 hover:border-primary hover:text-primary'
-            }`}
-          >
-            {isSpeakerEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
-          </Button>
-        </motion.div>
-
-        {/* Text Input */}
-        <div className="flex-1 relative">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder={isListening ? 'Listening...' : 'Ask about your crops...'}
-            className="glass-input w-full pr-12 rounded-xl text-sm"
-            disabled={isListening}
-          />
-          {isListening && (
-            <motion.div
-              animate={{ scale: [1, 1.2, 1] }}
-              transition={{ repeat: Infinity, duration: 0.8 }}
-              className="absolute right-12 top-1/2 -translate-y-1/2"
-            >
-              <div className="w-2 h-2 rounded-full bg-destructive" />
-            </motion.div>
-          )}
-        </div>
-
-        {/* Send Button */}
-        <motion.div whileTap={{ scale: 0.95 }}>
-          <Button
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading}
-            className="rounded-xl bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
-        </motion.div>
-      </div>
-
-      {/* Voice Status */}
+    <>
+      {/* Backdrop for expanded mode */}
       <AnimatePresence>
-        {isListening && (
+        {isExpanded && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-3 text-center"
-          >
-            <p className="text-xs text-destructive flex items-center justify-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-              Listening... Speak now
-            </p>
-          </motion.div>
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+            onClick={() => setIsExpanded(false)}
+          />
         )}
       </AnimatePresence>
-    </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{
+          opacity: 1,
+          y: 0,
+        }}
+        transition={{ delay: 0.4 }}
+        className={`glass-card p-6 hover-lift transition-all duration-300 ${isExpanded
+          ? 'fixed inset-4 z-50 flex flex-col'
+          : ''
+          }`}
+        layout
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+              <Sparkles className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-display font-bold text-foreground">AI Crop Consultant</h3>
+              <p className="text-xs text-muted-foreground">Powered by FarmFlow Intelligence</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ repeat: Infinity, duration: 2 }}
+                className="w-2 h-2 rounded-full bg-success"
+              />
+              <span className="text-xs text-muted-foreground">Online</span>
+            </div>
+
+            {/* Expand/Contract Button */}
+            <motion.button
+              onClick={() => setIsExpanded(!isExpanded)}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              className="w-8 h-8 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent flex items-center justify-center text-muted-foreground hover:text-foreground transition-all duration-200"
+              title={isExpanded ? 'Exit Fullscreen (Esc)' : 'Expand to Fullscreen'}
+            >
+              {isExpanded ? (
+                <Minimize2 className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </motion.button>
+          </div>
+        </div>
+
+        {/* Messages Area */}
+        <div className={`overflow-y-auto mb-4 pr-2 space-y-4 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent ${isExpanded ? 'flex-1' : 'h-80'
+          }`}>
+          <AnimatePresence>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.role === 'assistant'
+                    ? 'bg-gradient-to-br from-primary to-secondary'
+                    : 'bg-gradient-to-br from-secondary to-water'
+                    }`}
+                >
+                  {message.role === 'assistant' ? (
+                    <Bot className="w-4 h-4 text-white" />
+                  ) : (
+                    <User className="w-4 h-4 text-white" />
+                  )}
+                </div>
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-3 ${message.role === 'assistant'
+                    ? 'bg-muted/50 backdrop-blur-sm border border-border/50'
+                    : 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground'
+                    }`}
+                >
+                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  <p
+                    className={`text-[10px] mt-1 ${message.role === 'assistant' ? 'text-muted-foreground' : 'text-primary-foreground/70'
+                      }`}
+                  >
+                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* Loading indicator */}
+          {isLoading && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex gap-3"
+            >
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
+                <Bot className="w-4 h-4 text-white" />
+              </div>
+              <div className="bg-muted/50 backdrop-blur-sm border border-border/50 rounded-2xl px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">Analyzing your farm data...</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Area */}
+        <div className="flex items-end gap-2">
+          {/* Microphone Button */}
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={toggleListening}
+              className={`rounded-xl h-12 w-12 transition-all duration-300 ${isListening
+                ? 'bg-destructive/10 border-destructive text-destructive animate-pulse'
+                : 'hover:bg-primary/10 hover:border-primary hover:text-primary'
+                }`}
+            >
+              {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+            </Button>
+          </motion.div>
+
+          {/* Speaker Toggle */}
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsSpeakerEnabled(!isSpeakerEnabled)}
+              className={`rounded-xl h-12 w-12 transition-all duration-300 ${isSpeakerEnabled
+                ? 'bg-primary/10 border-primary text-primary'
+                : 'hover:bg-primary/10 hover:border-primary hover:text-primary'
+                }`}
+            >
+              {isSpeakerEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+            </Button>
+          </motion.div>
+
+          {/* Text Input - Now a Textarea */}
+          <div className="flex-1 relative">
+            <textarea
+              ref={textareaRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder={isListening ? 'Listening...' : 'Ask about your crops...'}
+              className="glass-input w-full pr-4 rounded-xl text-base py-3 px-4 min-h-[48px] max-h-[120px] resize-none"
+              disabled={isListening}
+              rows={1}
+            />
+            {isListening && (
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ repeat: Infinity, duration: 0.8 }}
+                className="absolute right-4 top-1/2 -translate-y-1/2"
+              >
+                <div className="w-2 h-2 rounded-full bg-destructive" />
+              </motion.div>
+            )}
+          </div>
+
+          {/* Send Button */}
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button
+              onClick={handleSendMessage}
+              disabled={!inputValue.trim() || isLoading}
+              className="rounded-xl h-12 px-6 bg-gradient-to-r from-primary to-secondary hover:opacity-90 transition-opacity"
+            >
+              <Send className="w-5 h-5" />
+            </Button>
+          </motion.div>
+        </div>
+
+        {/* Voice Status */}
+        <AnimatePresence>
+          {isListening && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mt-3 text-center"
+            >
+              <p className="text-xs text-destructive flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+                Listening... Speak now
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </>
   );
 };
 
 export default ChatWidget;
+

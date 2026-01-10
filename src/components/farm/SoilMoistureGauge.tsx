@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, useSpring, useTransform } from 'framer-motion';
+import { motion } from 'framer-motion';
 import CropIcon from './CropIcon';
 
 interface SoilMoistureGaugeProps {
@@ -13,9 +13,9 @@ const SoilMoistureGauge: React.FC<SoilMoistureGaugeProps> = ({
   cropType,
   sensorOnline,
 }) => {
-  // Spring animation for smooth needle movement
-  const springValue = useSpring(value, { stiffness: 100, damping: 30 });
-  const rotation = useTransform(springValue, [0, 100], [-90, 90]);
+  // Calculate needle rotation angle
+  // 0% = -90deg (pointing left), 50% = 0deg (pointing up), 100% = 90deg (pointing right)
+  const needleAngle = ((value / 100) * 180) - 90;
 
   const getStatusColor = () => {
     if (value < 30) return 'text-destructive';
@@ -29,6 +29,11 @@ const SoilMoistureGauge: React.FC<SoilMoistureGaugeProps> = ({
     if (value < 70) return 'Optimal';
     return 'Saturated';
   };
+
+  // Calculate the arc dashoffset based on value (0-100)
+  // The arc length is approximately 251 (π * 80)
+  const arcLength = 251;
+  const filledLength = (value / 100) * arcLength;
 
   return (
     <motion.div
@@ -60,7 +65,7 @@ const SoilMoistureGauge: React.FC<SoilMoistureGaugeProps> = ({
             strokeWidth="12"
             strokeLinecap="round"
           />
-          
+
           {/* Gradient Colored Arc */}
           <defs>
             <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -75,13 +80,13 @@ const SoilMoistureGauge: React.FC<SoilMoistureGaugeProps> = ({
             stroke="url(#gaugeGradient)"
             strokeWidth="12"
             strokeLinecap="round"
-            strokeDasharray="251"
-            strokeDashoffset={251 - (value / 100) * 251}
-            className="transition-all duration-1000"
+            strokeDasharray={arcLength}
+            strokeDashoffset={arcLength - filledLength}
+            style={{ transition: 'stroke-dashoffset 1s ease-out' }}
           />
 
-          {/* Needle */}
-          <motion.g style={{ rotate: rotation, transformOrigin: '100px 100px' }}>
+          {/* Needle - rotating line with fixed center pivot */}
+          <g transform={`rotate(${needleAngle}, 100, 100)`} style={{ transition: 'transform 0.8s ease-out' }}>
             <line
               x1="100"
               y1="100"
@@ -91,8 +96,10 @@ const SoilMoistureGauge: React.FC<SoilMoistureGaugeProps> = ({
               strokeWidth="3"
               strokeLinecap="round"
             />
-            <circle cx="100" cy="100" r="8" fill="hsl(var(--foreground))" />
-          </motion.g>
+          </g>
+
+          {/* Fixed center pivot circle - drawn after needle so it appears on top */}
+          <circle cx="100" cy="100" r="8" fill="hsl(var(--foreground))" />
 
           {/* Labels */}
           <text x="15" y="115" fontSize="10" fill="hsl(var(--muted-foreground))">0%</text>
