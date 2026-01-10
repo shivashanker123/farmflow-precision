@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Leaf, AlertTriangle, CheckCircle, Info } from 'lucide-react';
 import { useFarm } from '@/contexts/FarmContext';
+import ChatWidget from '@/components/farm/ChatWidget';
 
 const CropDoctor = () => {
   const { farmData } = useFarm();
@@ -134,7 +135,7 @@ const CropDoctor = () => {
             { title: 'Daily Water Need', value: `${farmData.dailyWaterNeed} mm`, description: 'Based on crop type' },
             { title: 'Growth Stage', value: 'Day 45', description: 'Vegetative phase' },
             { title: 'Next Action', value: healthStatus === 'healthy' ? 'Monitor' : 'Irrigate', description: 'Recommended action' },
-          ].map((tip, index) => (
+          ].map((tip) => (
             <div key={tip.title} className="glass-card p-4 hover-lift">
               <p className="text-sm text-muted-foreground">{tip.title}</p>
               <p className="text-xl font-display font-bold text-foreground mt-1">{tip.value}</p>
@@ -142,6 +143,9 @@ const CropDoctor = () => {
             </div>
           ))}
         </motion.div>
+
+        {/* AI Crop Consultant Chat */}
+        <ChatWidget />
       </div>
     </DashboardLayout>
   );
