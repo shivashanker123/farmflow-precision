@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wheat, Leaf, Droplets, ArrowRight, ArrowLeft, Check, User, Mountain, CircleDot } from 'lucide-react';
+import { Wheat, Leaf, Droplets, ArrowRight, ArrowLeft, Check, User, Mountain, CircleDot, Calculator, PenLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,8 +46,30 @@ const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
   const [irrigationSource, setIrrigationSource] = useState<IrrigationSource | ''>('');
   const [tankCapacity, setTankCapacity] = useState('');
   const [flowRate, setFlowRate] = useState('');
+  
+  // Bucket test calculator state
+  const [calcMode, setCalcMode] = useState<'manual' | 'calculate'>('manual');
+  const [containerVolume, setContainerVolume] = useState('');
+  const [fillTime, setFillTime] = useState('');
 
   const totalSteps = 6;
+  
+  // Calculate flow rate from bucket test
+  const calculatedFlowRate = useMemo(() => {
+    const volume = parseFloat(containerVolume);
+    const time = parseFloat(fillTime);
+    if (volume > 0 && time > 0) {
+      return (volume / time) * 3600;
+    }
+    return null;
+  }, [containerVolume, fillTime]);
+
+  const handleUseCalculatedRate = () => {
+    if (calculatedFlowRate) {
+      setFlowRate(Math.round(calculatedFlowRate).toString());
+      setCalcMode('manual');
+    }
+  };
 
   const handleNext = () => {
     if (step < totalSteps) setStep(step + 1);
@@ -312,26 +334,138 @@ const FarmSetupWizard: React.FC<FarmSetupWizardProps> = ({ onComplete }) => {
                   <h2 className="text-2xl font-display font-bold text-foreground">Pump Flow Rate</h2>
                   <p className="text-muted-foreground mt-2">How fast does your pump deliver water?</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="flowRate">Flow Rate (Liters/Hour)</Label>
-                  <Input
-                    id="flowRate"
-                    type="number"
-                    placeholder="e.g., 5000"
-                    value={flowRate}
-                    onChange={(e) => setFlowRate(e.target.value)}
-                    className="glass-input h-12"
-                  />
-                  {flowRate && (
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-sm text-muted-foreground mt-2"
-                    >
-                      {(parseFloat(flowRate) / 1000).toFixed(1)} m³/hour
-                    </motion.p>
-                  )}
+
+                {/* Mode Toggle */}
+                <div className="flex gap-2 p-1 bg-muted/50 rounded-xl">
+                  <button
+                    onClick={() => setCalcMode('manual')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                      calcMode === 'manual'
+                        ? 'bg-card text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <PenLine className="w-4 h-4" />
+                    Manual Entry
+                  </button>
+                  <button
+                    onClick={() => setCalcMode('calculate')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-medium transition-all ${
+                      calcMode === 'calculate'
+                        ? 'bg-card text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Calculator className="w-4 h-4" />
+                    Calculate Rate
+                  </button>
                 </div>
+
+                <AnimatePresence mode="wait">
+                  {calcMode === 'manual' ? (
+                    <motion.div
+                      key="manual"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="space-y-2"
+                    >
+                      <Label htmlFor="flowRate">Flow Rate (Liters/Hour)</Label>
+                      <Input
+                        id="flowRate"
+                        type="number"
+                        placeholder="e.g., 5000"
+                        value={flowRate}
+                        onChange={(e) => setFlowRate(e.target.value)}
+                        className="glass-input h-12"
+                      />
+                      {flowRate && (
+                        <motion.p
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="text-sm text-muted-foreground mt-2"
+                        >
+                          {(parseFloat(flowRate) / 1000).toFixed(1)} m³/hour
+                        </motion.p>
+                      )}
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="calculate"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="space-y-4"
+                    >
+                      {/* Bucket Test Instructions */}
+                      <div className="glass-card p-4 bg-primary/5 border-primary/20">
+                        <p className="text-sm text-foreground font-medium mb-1">🪣 Bucket Test</p>
+                        <p className="text-xs text-muted-foreground">
+                          Fill a container with your pump and measure the time. We'll calculate the flow rate for you.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="containerVolume">Container Volume</Label>
+                          <div className="relative">
+                            <Input
+                              id="containerVolume"
+                              type="number"
+                              placeholder="e.g., 20"
+                              value={containerVolume}
+                              onChange={(e) => setContainerVolume(e.target.value)}
+                              className="glass-input h-12 pr-12"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">L</span>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="fillTime">Time to Fill</Label>
+                          <div className="relative">
+                            <Input
+                              id="fillTime"
+                              type="number"
+                              placeholder="e.g., 10"
+                              value={fillTime}
+                              onChange={(e) => setFillTime(e.target.value)}
+                              className="glass-input h-12 pr-12"
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">sec</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Calculated Result */}
+                      {calculatedFlowRate && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="glass-card p-4 border-primary/30 bg-primary/10"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-xs text-muted-foreground">Calculated Flow Rate</p>
+                              <p className="text-2xl font-bold text-primary">
+                                {Math.round(calculatedFlowRate).toLocaleString()} <span className="text-sm font-normal">L/hr</span>
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                ({(calculatedFlowRate / 1000).toFixed(2)} m³/hour)
+                              </p>
+                            </div>
+                            <Button
+                              onClick={handleUseCalculatedRate}
+                              className="bg-primary hover:bg-primary/90"
+                            >
+                              <Check className="w-4 h-4 mr-2" />
+                              Use this Rate
+                            </Button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             )}
           </motion.div>
