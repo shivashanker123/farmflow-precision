@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export type SoilType = 'sandy' | 'clay' | 'loam' | 'black';
 export type IrrigationSource = 'tank' | 'borewell';
+export type DataSource = 'live' | 'fallback';
 
 export interface FarmData {
   cropType: 'wheat' | 'corn' | 'tomato';
@@ -10,6 +11,8 @@ export interface FarmData {
   dailyWaterNeed: number; // mm/day based on crop
   usedWater: number; // liters used
   soilMoisture: number; // percentage
+  temperature: number; // celsius
+  humidity: number; // percentage
   sensorOnline: boolean;
   pumpActive: boolean;
   farmerName: string;
@@ -17,6 +20,9 @@ export interface FarmData {
   irrigationSource: IrrigationSource;
   flowRate: number; // liters/hour (for borewell)
   pumpRunTime: number; // hours pumped today
+  dataSource: DataSource; // live sensor or fallback API
+  espIP: string; // ESP32 IP address
+  rainExpected: boolean; // Mock rain prediction
 }
 
 const CROP_WATER_NEEDS: Record<string, number> = {
@@ -40,7 +46,10 @@ interface FarmContextType {
   isSetupComplete: boolean;
   completeFarmSetup: (params: FarmSetupParams) => void;
   updateSoilMoisture: (value: number) => void;
+  updateSensorData: (data: { soilMoisture?: number; temperature?: number; humidity?: number }) => void;
+  setDataSource: (source: DataSource) => void;
   togglePump: () => void;
+  setPumpActive: (active: boolean) => void;
   toggleSensorOnline: () => void;
   useWater: (liters: number) => void;
   addPumpRunTime: (hours: number) => void;
@@ -48,6 +57,9 @@ interface FarmContextType {
   getRecommendation: () => 'full' | 'partial' | 'skip';
   getRemainingDays: () => number;
   getTotalPumped: () => number;
+  setRainExpected: (expected: boolean) => void;
+  setEspIP: (ip: string) => void;
+  isPumpLocked: () => { locked: boolean; reason: string | null };
 }
 
 const FarmContext = createContext<FarmContextType | undefined>(undefined);
@@ -61,6 +73,8 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     dailyWaterNeed: 7,
     usedWater: 12500,
     soilMoisture: 65,
+    temperature: 28,
+    humidity: 65,
     sensorOnline: true,
     pumpActive: false,
     farmerName: 'John',
@@ -68,6 +82,9 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     irrigationSource: 'tank',
     flowRate: 5000,
     pumpRunTime: 2.5,
+    dataSource: 'fallback',
+    espIP: '192.168.4.1',
+    rainExpected: false,
   });
 
   const completeFarmSetup = (params: FarmSetupParams) => {
@@ -92,12 +109,53 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setFarmData(prev => ({ ...prev, soilMoisture: value }));
   };
 
+  const updateSensorData = (data: { soilMoisture?: number; temperature?: number; humidity?: number }) => {
+    setFarmData(prev => ({
+      ...prev,
+      soilMoisture: data.soilMoisture ?? prev.soilMoisture,
+      temperature: data.temperature ?? prev.temperature,
+      humidity: data.humidity ?? prev.humidity,
+    }));
+  };
+
+  const setDataSource = (source: DataSource) => {
+    setFarmData(prev => ({ ...prev, dataSource: source }));
+  };
+
   const togglePump = () => {
-    setFarmData(prev => ({ ...prev, pumpActive: !prev.pumpActive }));
+    const { locked } = isPumpLocked();
+    if (!locked) {
+      setFarmData(prev => ({ ...prev, pumpActive: !prev.pumpActive }));
+    }
+  };
+
+  const setPumpActive = (active: boolean) => {
+    const { locked } = isPumpLocked();
+    if (!locked || !active) {
+      setFarmData(prev => ({ ...prev, pumpActive: active }));
+    }
   };
 
   const toggleSensorOnline = () => {
     setFarmData(prev => ({ ...prev, sensorOnline: !prev.sensorOnline }));
+  };
+
+  const setRainExpected = (expected: boolean) => {
+    setFarmData(prev => ({ ...prev, rainExpected: expected }));
+  };
+
+  const setEspIP = (ip: string) => {
+    setFarmData(prev => ({ ...prev, espIP: ip }));
+  };
+
+  const isPumpLocked = (): { locked: boolean; reason: string | null } => {
+    if (farmData.soilMoisture > 80) {
+      return { locked: true, reason: 'Moisture levels optimal' };
+    }
+    if (farmData.rainExpected) {
+      return { locked: true, reason: 'Rain expected' };
+    }
+    return { locked: false, reason: null };
   };
 
   const useWater = (liters: number) => {
@@ -163,7 +221,10 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isSetupComplete,
         completeFarmSetup,
         updateSoilMoisture,
+        updateSensorData,
+        setDataSource,
         togglePump,
+        setPumpActive,
         toggleSensorOnline,
         useWater,
         addPumpRunTime,
@@ -171,6 +232,9 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         getRecommendation,
         getRemainingDays,
         getTotalPumped,
+        setRainExpected,
+        setEspIP,
+        isPumpLocked,
       }}
     >
       {children}

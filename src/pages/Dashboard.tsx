@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -10,8 +10,12 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import TrafficLightIndicator from '@/components/farm/TrafficLightIndicator';
 import SoilMoistureGauge from '@/components/farm/SoilMoistureGauge';
 import SwipeToIrrigate from '@/components/farm/SwipeToIrrigate';
+import DataSourceBadge from '@/components/farm/DataSourceBadge';
+import MotorControlCard from '@/components/farm/MotorControlCard';
+import SensorCard from '@/components/farm/SensorCard';
 import { useFarm } from '@/contexts/FarmContext';
-import { Calendar, Sun, Cloud, Thermometer, MapPin, Navigation, Edit3, Loader2, Check, X, CloudRain, CloudSnow, CloudLightning, CloudFog, Wind } from 'lucide-react';
+import { useESP32Data, ESP32_CONFIG } from '@/hooks/useESP32Data';
+import { Calendar, Sun, Cloud, Thermometer, MapPin, Navigation, Edit3, Loader2, Check, X, CloudRain, CloudSnow, CloudLightning, CloudFog, Wifi, Settings } from 'lucide-react';
 
 // WorldWeatherOnline API configuration
 const WEATHER_API_KEY = '6c18236020184628a3d121913261001';
@@ -28,13 +32,35 @@ const Dashboard = () => {
   const {
     farmData,
     updateSoilMoisture,
+    updateSensorData,
+    setDataSource,
     togglePump,
+    setPumpActive,
     toggleSensorOnline,
     getRecommendation,
+    setRainExpected,
+    setEspIP,
+    isPumpLocked,
   } = useFarm();
 
   const recommendation = getRecommendation();
   const cropDay = 45; // Simulated crop day
+  const pumpLockStatus = isPumpLocked();
+
+  // ESP32 integration
+  const esp32Data = useESP32Data(farmData.espIP);
+
+  // Sync ESP32 data with farm context
+  useEffect(() => {
+    if (esp32Data.sensorData) {
+      updateSensorData({
+        soilMoisture: esp32Data.sensorData.soilMoisture,
+        temperature: esp32Data.sensorData.temperature,
+        humidity: esp32Data.sensorData.humidity,
+      });
+      setDataSource(esp32Data.isLive ? 'live' : 'fallback');
+    }
+  }, [esp32Data.sensorData, esp32Data.isLive]);
 
   // Location state
   const [locationPopoverOpen, setLocationPopoverOpen] = useState(false);
@@ -45,6 +71,10 @@ const Dashboard = () => {
   const [manualLat, setManualLat] = useState('');
   const [manualLng, setManualLng] = useState('');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+
+  // ESP32 settings
+  const [espSettingsOpen, setEspSettingsOpen] = useState(false);
+  const [tempEspIP, setTempEspIP] = useState(farmData.espIP);
 
   // Weather state
   const [weatherData, setWeatherData] = useState<WeatherData>({
@@ -68,39 +98,34 @@ const Dashboard = () => {
       setWeatherLoading(true);
       setWeatherError(null);
 
-      // WorldWeatherOnline API URL
       const url = `${WEATHER_BASE_URL}?key=${WEATHER_API_KEY}&q=${userLocation.lat},${userLocation.lng}&format=json&num_of_days=1`;
-      console.log('Weather API URL:', url);
 
       try {
         const response = await fetch(url);
-        console.log('API Response status:', response.status);
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error('API Error:', errorText);
           throw new Error(`API Error: ${response.status}`);
         }
 
         const data = await response.json();
-        console.log('Weather data received:', data);
 
-        // Check if API returned an error
         if (data.data?.error) {
           throw new Error(data.data.error[0]?.msg || 'API Error');
         }
 
-        // Parse WorldWeatherOnline response format
         const current = data.data.current_condition[0];
         const newWeatherData = {
           temperature: parseInt(current.temp_C),
           condition: current.weatherDesc[0].value,
           humidity: parseInt(current.humidity),
-          icon: current.weatherCode, // WorldWeatherOnline uses weather codes
+          icon: current.weatherCode,
         };
 
-        console.log('Setting weather data:', newWeatherData);
         setWeatherData(newWeatherData);
+        
+        // Check for rain conditions (mock prediction)
+        const isRainy = current.weatherDesc[0].value.toLowerCase().includes('rain');
+        setRainExpected(isRainy);
       } catch (error) {
         console.error('Weather fetch error:', error);
         setWeatherError('Failed to load weather');
@@ -114,11 +139,9 @@ const Dashboard = () => {
 
   // Auto-detect location on component mount
   useEffect(() => {
-    console.log('Attempting auto-location detection...');
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          console.log('Auto-location success:', position.coords);
           setUserLocation({
             lat: position.coords.latitude,
             lng: position.coords.longitude,
@@ -182,27 +205,19 @@ const Dashboard = () => {
 
   // Handle manual location submission
   const handleManualSubmit = () => {
-    console.log('handleManualSubmit called');
-    console.log('manualLat:', manualLat, 'manualLng:', manualLng);
-
     const lat = parseFloat(manualLat);
     const lng = parseFloat(manualLng);
 
-    console.log('Parsed values - lat:', lat, 'lng:', lng);
-
     if (isNaN(lat) || isNaN(lng)) {
-      console.log('Invalid coordinates - setting error');
       setGpsError('Please enter valid coordinates');
       return;
     }
 
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      console.log('Coordinates out of range - setting error');
       setGpsError('Coordinates out of range');
       return;
     }
 
-    console.log('Setting user location to:', { lat, lng });
     setUserLocation({ lat, lng });
     setGpsSuccess(true);
     setTimeout(() => {
@@ -224,6 +239,40 @@ const Dashboard = () => {
     }
   };
 
+  // Handle ESP32 IP update
+  const handleEspIPUpdate = () => {
+    setEspIP(tempEspIP);
+    setEspSettingsOpen(false);
+  };
+
+  // Handle motor toggle with ESP32 integration
+  const handleMotorToggle = useCallback(async () => {
+    if (pumpLockStatus.locked) return;
+
+    // Try to send command to ESP32
+    const newState = !farmData.pumpActive;
+    const endpoint = newState ? '/pump/on' : '/pump/off';
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), ESP32_CONFIG.TIMEOUT);
+
+      await fetch(`http://${farmData.espIP}${endpoint}`, {
+        method: 'POST',
+        signal: controller.signal,
+        mode: 'cors',
+      });
+
+      clearTimeout(timeoutId);
+    } catch (error) {
+      // Continue with local state update even if ESP32 is unreachable
+      console.log('ESP32 command failed, updating local state');
+    }
+
+    // Update local state
+    setPumpActive(newState);
+  }, [farmData.pumpActive, farmData.espIP, pumpLockStatus.locked, setPumpActive]);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -233,18 +282,27 @@ const Dashboard = () => {
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4"
         >
-          <div>
-            <h1 className="text-3xl font-display font-bold text-foreground">Command Center</h1>
-            <p className="text-muted-foreground mt-1">
-              {new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                month: 'long',
-                day: 'numeric'
-              })}
-            </p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h1 className="text-3xl font-display font-bold text-foreground">Command Center</h1>
+              <p className="text-muted-foreground mt-1">
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </p>
+            </div>
+            
+            {/* Data Source Badge */}
+            <DataSourceBadge
+              isLive={esp32Data.isLive}
+              lastUpdated={esp32Data.lastUpdated}
+              isLoading={esp32Data.isLoading}
+            />
           </div>
 
-          {/* Weather Widget with Location Button */}
+          {/* Weather Widget with Location & ESP Settings */}
           <div className="flex items-center gap-3">
             <div className={`glass-card px-6 py-3 flex items-center gap-6 transition-opacity duration-300 ${weatherLoading ? 'opacity-70' : ''}`}>
               <div className="flex items-center gap-2">
@@ -265,14 +323,62 @@ const Dashboard = () => {
               </div>
             </div>
 
+            {/* ESP32 Settings Button */}
+            <Popover open={espSettingsOpen} onOpenChange={setEspSettingsOpen}>
+              <PopoverTrigger asChild>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className={`glass-card p-3 hover-lift flex items-center justify-center transition-all duration-300 ${esp32Data.isLive ? 'ring-2 ring-success/50' : ''}`}
+                  title="ESP32 Settings"
+                >
+                  <Wifi className={`w-5 h-5 ${esp32Data.isLive ? 'text-success' : 'text-muted-foreground'}`} />
+                </motion.button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 p-0 glass-card border-white/30" align="end" sideOffset={8}>
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Wifi className="w-4 h-4 text-primary" />
+                    <h4 className="font-display font-semibold text-foreground">ESP32 Settings</h4>
+                  </div>
+
+                  {/* Connection Status */}
+                  <div className={`flex items-center gap-2 p-3 rounded-xl ${esp32Data.isLive ? 'bg-success/10 border border-success/30' : 'bg-warning/10 border border-warning/30'}`}>
+                    <div className={`w-2 h-2 rounded-full ${esp32Data.isLive ? 'bg-success animate-pulse' : 'bg-warning'}`} />
+                    <span className={`text-sm font-medium ${esp32Data.isLive ? 'text-success' : 'text-warning'}`}>
+                      {esp32Data.isLive ? 'Connected to ESP32' : 'ESP32 Offline'}
+                    </span>
+                  </div>
+
+                  {/* IP Address Input */}
+                  <div className="space-y-2">
+                    <Label className="text-sm text-muted-foreground">ESP32 IP Address</Label>
+                    <Input
+                      value={tempEspIP}
+                      onChange={(e) => setTempEspIP(e.target.value)}
+                      placeholder="192.168.4.1"
+                      className="glass-input"
+                    />
+                  </div>
+
+                  <Button onClick={handleEspIPUpdate} className="w-full bg-primary hover:bg-primary/90">
+                    Update IP
+                  </Button>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    Default: {ESP32_CONFIG.IP}
+                  </p>
+                </div>
+              </PopoverContent>
+            </Popover>
+
             {/* Location Button */}
             <Popover open={locationPopoverOpen} onOpenChange={handlePopoverChange}>
               <PopoverTrigger asChild>
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  className={`glass-card p-3 hover-lift flex items-center justify-center transition-all duration-300 ${userLocation ? 'ring-2 ring-primary/50' : ''
-                    }`}
+                  className={`glass-card p-3 hover-lift flex items-center justify-center transition-all duration-300 ${userLocation ? 'ring-2 ring-primary/50' : ''}`}
                   title="Set Location"
                 >
                   <MapPin className={`w-5 h-5 ${userLocation ? 'text-primary' : 'text-muted-foreground'}`} />
@@ -416,6 +522,27 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
+        {/* Sensor Data Cards */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="grid grid-cols-2 gap-4"
+        >
+          <SensorCard
+            type="temperature"
+            value={farmData.temperature}
+            unit="°C"
+            isLive={esp32Data.isLive}
+          />
+          <SensorCard
+            type="humidity"
+            value={farmData.humidity}
+            unit="%"
+            isLive={esp32Data.isLive}
+          />
+        </motion.div>
+
         {/* Smart Recommendation Engine */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -445,13 +572,23 @@ const Dashboard = () => {
             />
           </motion.div>
 
-          {/* Irrigation Control & Reliability Toggle */}
+          {/* Irrigation Control & Motor Control */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
             className="space-y-6"
           >
+            {/* Motor Control Card */}
+            <MotorControlCard
+              isOn={farmData.pumpActive}
+              isLoading={false}
+              isLocked={pumpLockStatus.locked}
+              lockReason={pumpLockStatus.reason}
+              onToggle={handleMotorToggle}
+              isLive={esp32Data.isLive}
+            />
+
             {/* Swipe to Irrigate */}
             <SwipeToIrrigate
               onActivate={togglePump}
@@ -485,22 +622,37 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Manual Moisture Control (Demo) */}
+            {/* Demo Controls */}
             <div className="glass-card p-6 hover-lift">
               <h3 className="font-display font-bold text-lg text-foreground mb-4">Demo Controls</h3>
               <div className="space-y-4">
-                <Label>Adjust Soil Moisture: {farmData.soilMoisture}%</Label>
-                <Slider
-                  value={[farmData.soilMoisture]}
-                  onValueChange={(value) => updateSoilMoisture(value[0])}
-                  max={100}
-                  min={0}
-                  step={1}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Drag to simulate soil moisture changes
-                </p>
+                <div>
+                  <Label>Adjust Soil Moisture: {farmData.soilMoisture}%</Label>
+                  <Slider
+                    value={[farmData.soilMoisture]}
+                    onValueChange={(value) => updateSoilMoisture(value[0])}
+                    max={100}
+                    min={0}
+                    step={1}
+                    className="w-full mt-2"
+                  />
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Drag to simulate soil moisture changes
+                  </p>
+                </div>
+                
+                {/* Rain Toggle for Testing */}
+                <div className="flex items-center justify-between pt-4 border-t border-border/50">
+                  <div className="flex items-center gap-3">
+                    <CloudRain className="w-5 h-5 text-secondary" />
+                    <Label htmlFor="rain-toggle">Simulate Rain Expected</Label>
+                  </div>
+                  <Switch
+                    id="rain-toggle"
+                    checked={farmData.rainExpected}
+                    onCheckedChange={setRainExpected}
+                  />
+                </div>
               </div>
             </div>
           </motion.div>
