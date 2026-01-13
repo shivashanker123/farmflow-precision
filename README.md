@@ -1,73 +1,73 @@
-# Welcome to your Lovable project
+# Water Budget–Based Smart Irrigation System
 
-## Project info
+> "We use one sensor for ground truth and water budgeting for intelligence."
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 🔹 Introduction
+Farmers often waste water due to fixed irrigation schedules and a lack of planning based on available water. Existing sensor-heavy systems are costly and complex.
 
-## How can I edit this code?
+**FarmFlow Precision** solves this by using **only one soil moisture sensor** combined with intelligent **water budgeting logic** to decide exactly when and how much to irrigate. This ensures optimal water usage, validating "Ground Truth" with the sensor and using "Water Budgeting" for intelligence.
 
-There are several ways of editing your application.
+## 🔹 Core Features
 
-**Use Lovable**
+### 🧠 Intelligent Decision Logic
+*   **If Soil is DRY & Water Budget Available** → Irrigate normally.
+*   **If Soil is DRY & Water Budget is LOW** → Irrigate partially.
+*   **If Soil is MOIST** → Skip irrigation.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### 📊 Dashboard Insights
+*   Current soil moisture status (Dry / Optimal / Wet)
+*   Remaining water for the season
+*   Estimated days of irrigation left
+*   Water saved by skipping unnecessary irrigation
 
-Changes made via Lovable will be committed automatically to this repo.
+### 🌾 Inputs Taken
+*   Crop type & attributes (Knowledge base of water requirements)
+*   Land area
+*   Water source capacity (Tank/Borewell)
+*   Crop duration
 
-**Use your preferred IDE**
+## 🛠️ Hardware Requirements
+*   1× Soil moisture sensor (Representative field area)
+*   1× Microcontroller (ESP32 / Arduino)
+*   1× Relay (optional for pump control)
+*   Pump (for demonstration)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 🚀 Getting Started
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Follow these instructions to get the project running on your local machine.
 
-Follow these steps:
+### Prerequisites
+Ensure you have **Node.js** and **npm** installed.
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Installation
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd farmflow-precision
+    ```
 
-# Step 3: Install the necessary dependencies.
-npm i
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### Running the Project
+
+Start the development server:
+
+```bash
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Open your browser and navigate to the URL shown in the terminal (usually `http://localhost:8080` or `http://localhost:5173`).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## 🔹 Advantages
+*   **Low Cost**: Uses minimum hardware (1 sensor).
+*   **Reliable**: Works even if the sensor fails (can fall back to logic).
+*   **Scalable**: Suitable for small farmers and easy to upgrade.
 
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 🔹 Future Scope
+*   Integration with weather prediction APIs.
+*   AI-based optimization for crop yields.
+*   Support for multiple sensors per field.
