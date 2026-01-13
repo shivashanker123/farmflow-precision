@@ -134,7 +134,7 @@ const ChatWidget = () => {
 
   // Ollama API configuration
   const OLLAMA_API_URL = 'http://localhost:11434/api/chat';
-  const OLLAMA_MODEL = 'llama3.2:latest';
+  const OLLAMA_MODEL = 'llama3:latest';
 
   // Create system context for the AI
   const getSystemPrompt = () => {

@@ -86,7 +86,7 @@ const Dashboard = () => {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
 
-  // Fetch weather data when location changes
+  // Fetch weather data when location changes + refresh every 1 hour
   useEffect(() => {
     const fetchWeather = async () => {
       if (!userLocation) {
@@ -122,7 +122,8 @@ const Dashboard = () => {
         };
 
         setWeatherData(newWeatherData);
-        
+        console.log('Weather updated at:', new Date().toLocaleTimeString());
+
         // Check for rain conditions (mock prediction)
         const isRainy = current.weatherDesc[0].value.toLowerCase().includes('rain');
         setRainExpected(isRainy);
@@ -134,7 +135,21 @@ const Dashboard = () => {
       }
     };
 
+    // Initial fetch
     fetchWeather();
+
+    // Set up hourly refresh (1 hour = 3600000 ms)
+    // This ensures max 24 API calls per day, well within 100 free calls limit
+    const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
+    const intervalId = setInterval(() => {
+      console.log('Hourly weather refresh triggered');
+      fetchWeather();
+    }, REFRESH_INTERVAL);
+
+    // Cleanup interval on unmount or location change
+    return () => {
+      clearInterval(intervalId);
+    };
   }, [userLocation]);
 
   // Auto-detect location on component mount
@@ -293,7 +308,7 @@ const Dashboard = () => {
                 })}
               </p>
             </div>
-            
+
             {/* Data Source Badge */}
             <DataSourceBadge
               isLive={esp32Data.isLive}
@@ -531,15 +546,15 @@ const Dashboard = () => {
         >
           <SensorCard
             type="temperature"
-            value={farmData.temperature}
+            value={weatherData.temperature}
             unit="°C"
-            isLive={esp32Data.isLive}
+            isLive={!weatherLoading && userLocation !== null}
           />
           <SensorCard
             type="humidity"
-            value={farmData.humidity}
+            value={weatherData.humidity}
             unit="%"
-            isLive={esp32Data.isLive}
+            isLive={!weatherLoading && userLocation !== null}
           />
         </motion.div>
 
@@ -640,7 +655,7 @@ const Dashboard = () => {
                     Drag to simulate soil moisture changes
                   </p>
                 </div>
-                
+
                 {/* Rain Toggle for Testing */}
                 <div className="flex items-center justify-between pt-4 border-t border-border/50">
                   <div className="flex items-center gap-3">

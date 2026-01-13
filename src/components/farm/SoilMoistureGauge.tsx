@@ -101,14 +101,14 @@ const SoilMoistureGauge: React.FC<SoilMoistureGaugeProps> = ({
           {/* Fixed center pivot circle - drawn after needle so it appears on top */}
           <circle cx="100" cy="100" r="8" fill="hsl(var(--foreground))" />
 
-          {/* Labels */}
-          <text x="15" y="115" fontSize="10" fill="hsl(var(--muted-foreground))">0%</text>
-          <text x="90" y="20" fontSize="10" fill="hsl(var(--muted-foreground))">50%</text>
-          <text x="170" y="115" fontSize="10" fill="hsl(var(--muted-foreground))">100%</text>
+          {/* Labels - positioned outside the arc */}
+          <text x="8" y="118" fontSize="11" fill="hsl(var(--muted-foreground))">0%</text>
+          <text x="88" y="8" fontSize="11" fill="hsl(var(--muted-foreground))">50%</text>
+          <text x="168" y="118" fontSize="11" fill="hsl(var(--muted-foreground))">100%</text>
         </svg>
 
-        {/* Center Value Display */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-center">
+        {/* Center Value Display - positioned below the gauge */}
+        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-center">
           <motion.span
             key={value}
             initial={{ scale: 1.2 }}

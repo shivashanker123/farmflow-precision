@@ -69,7 +69,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle })
           width: sidebarWidth,
         }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
-        className="fixed lg:static top-0 left-0 h-screen bg-sidebar z-50 flex flex-col"
+        className="fixed lg:sticky top-0 left-0 h-screen bg-sidebar z-50 flex flex-col"
         style={{ width: sidebarWidth }}
       >
         {/* Header */}
