@@ -67,20 +67,17 @@ const CropDoctor = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className={`glass-card p-8 hover-lift border-l-4 ${
-            healthStatus === 'critical' ? 'border-l-destructive' :
-            healthStatus === 'warning' ? 'border-l-warning' : 'border-l-success'
-          }`}
+          className={`glass-card p-8 hover-lift border-l-4 ${healthStatus === 'critical' ? 'border-l-destructive' :
+              healthStatus === 'warning' ? 'border-l-warning' : 'border-l-success'
+            }`}
         >
           <div className="flex items-center gap-6">
-            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center ${
-              healthStatus === 'critical' ? 'bg-destructive/10' :
-              healthStatus === 'warning' ? 'bg-warning/10' : 'bg-success/10'
-            }`}>
-              <Leaf className={`w-10 h-10 ${
-                healthStatus === 'critical' ? 'text-destructive' :
-                healthStatus === 'warning' ? 'text-warning' : 'text-success'
-              }`} />
+            <div className={`w-20 h-20 rounded-2xl flex items-center justify-center ${healthStatus === 'critical' ? 'bg-destructive/10' :
+                healthStatus === 'warning' ? 'bg-warning/10' : 'bg-success/10'
+              }`}>
+              <Leaf className={`w-10 h-10 ${healthStatus === 'critical' ? 'text-destructive' :
+                  healthStatus === 'warning' ? 'text-warning' : 'text-success'
+                }`} />
             </div>
             <div>
               <h2 className="text-2xl font-display font-bold text-foreground capitalize">
@@ -126,7 +123,7 @@ const CropDoctor = () => {
           </motion.div>
         )}
 
-        {/* Tips Grid */}
+        {/* Tips Grid - Enhanced with staggered animation */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -134,16 +131,30 @@ const CropDoctor = () => {
           className="grid md:grid-cols-2 gap-4"
         >
           {[
-            { title: 'Optimal Moisture Range', value: '50-70%', description: `Ideal for ${farmData.cropType}` },
-            { title: 'Daily Water Need', value: `${farmData.dailyWaterNeed} mm`, description: 'Based on crop type' },
-            { title: 'Growth Stage', value: 'Day 45', description: 'Vegetative phase' },
-            { title: 'Next Action', value: healthStatus === 'healthy' ? 'Monitor' : 'Irrigate', description: 'Recommended action' },
-          ].map((tip) => (
-            <div key={tip.title} className="glass-card p-4 hover-lift">
+            { title: 'Optimal Moisture Range', value: '50-70%', description: `Ideal for ${farmData.cropType}`, color: 'text-success' },
+            { title: 'Daily Water Need', value: `${farmData.dailyWaterNeed} mm`, description: 'Based on crop type', color: 'text-blue-400' },
+            { title: 'Growth Stage', value: 'Day 45', description: 'Vegetative phase', color: 'text-amber-400' },
+            { title: 'Next Action', value: healthStatus === 'healthy' ? 'Monitor' : 'Irrigate', description: 'Recommended action', color: healthStatus === 'healthy' ? 'text-green-400' : 'text-red-400' },
+          ].map((tip, index) => (
+            <motion.div
+              key={tip.title}
+              className="glass-card p-4 hover-lift cursor-default"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 + index * 0.1, type: 'spring', stiffness: 200 }}
+              whileHover={{ scale: 1.03, y: -3 }}
+            >
               <p className="text-sm text-muted-foreground">{tip.title}</p>
-              <p className="text-xl font-display font-bold text-foreground mt-1">{tip.value}</p>
+              <motion.p
+                className={`text-xl font-display font-bold mt-1 ${tip.color}`}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: 0.5 + index * 0.1, type: 'spring' }}
+              >
+                {tip.value}
+              </motion.p>
               <p className="text-xs text-muted-foreground mt-1">{tip.description}</p>
-            </div>
+            </motion.div>
           ))}
         </motion.div>
       </div>

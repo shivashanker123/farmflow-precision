@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { Mic, MicOff, Volume2, VolumeX, Send, Bot, User, Loader2, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFarm } from '@/contexts/FarmContext';
@@ -36,8 +36,9 @@ const ChatWidget = () => {
   const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -57,7 +58,7 @@ const ChatWidget = () => {
 
   // Initialize Speech Recognition
   useEffect(() => {
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognitionAPI = (window as typeof window & { SpeechRecognition?: typeof SpeechRecognition; webkitSpeechRecognition?: typeof SpeechRecognition }).SpeechRecognition || (window as typeof window & { webkitSpeechRecognition?: typeof SpeechRecognition }).webkitSpeechRecognition;
 
     if (SpeechRecognitionAPI) {
       recognitionRef.current = new SpeechRecognitionAPI();
@@ -65,7 +66,7 @@ const ChatWidget = () => {
       recognitionRef.current.interimResults = false;
       recognitionRef.current.lang = 'en-US';
 
-      recognitionRef.current.onresult = (event: any) => {
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         setInputValue(transcript);
         setIsListening(false);
@@ -250,7 +251,7 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
   };
 
   return (
-    <>
+    <LayoutGroup>
       {/* Backdrop for expanded mode */}
       <AnimatePresence>
         {isExpanded && (
@@ -258,24 +259,33 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-md z-40"
             onClick={() => setIsExpanded(false)}
           />
         )}
       </AnimatePresence>
 
       <motion.div
+        ref={containerRef}
+        layoutId="ai-chat-container"
         initial={{ opacity: 0, y: 20 }}
         animate={{
           opacity: 1,
           y: 0,
         }}
-        transition={{ delay: 0.4 }}
-        className={`glass-card p-6 hover-lift transition-all duration-300 ${isExpanded
-          ? 'fixed inset-4 z-50 flex flex-col'
-          : ''
+        transition={{
+          layout: {
+            type: 'spring',
+            stiffness: 350,
+            damping: 30,
+            mass: 0.8,
+          },
+          opacity: { duration: 0.3 },
+          y: { duration: 0.3 },
+        }}
+        className={`glass-card p-6 ${isExpanded ? 'fixed inset-4 z-50 flex flex-col' : 'relative'
           }`}
-        layout
       >
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -301,15 +311,15 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
             {/* Expand/Contract Button */}
             <motion.button
               onClick={() => setIsExpanded(!isExpanded)}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              className="w-8 h-8 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent flex items-center justify-center text-muted-foreground hover:text-foreground transition-all duration-200"
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="w-10 h-10 rounded-md bg-primary/20 hover:bg-primary/30 border border-primary/30 hover:border-primary/50 flex items-center justify-center text-primary hover:text-primary transition-all duration-300 shadow-sm hover:shadow-md"
               title={isExpanded ? 'Exit Fullscreen (Esc)' : 'Expand to Fullscreen'}
             >
               {isExpanded ? (
-                <Minimize2 className="w-4 h-4" />
+                <Minimize2 className="w-5 h-5" />
               ) : (
-                <Maximize2 className="w-4 h-4" />
+                <Maximize2 className="w-5 h-5" />
               )}
             </motion.button>
           </div>
@@ -358,7 +368,7 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
             ))}
           </AnimatePresence>
 
-          {/* Loading indicator */}
+          {/* Loading indicator - Animated typing dots */}
           {isLoading && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -369,9 +379,26 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
                 <Bot className="w-4 h-4 text-white" />
               </div>
               <div className="bg-muted/50 backdrop-blur-sm border border-border/50 rounded-2xl px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">Analyzing your farm data...</span>
+                <div className="flex items-center gap-1.5">
+                  {/* Animated typing dots */}
+                  <div className="flex items-center gap-1">
+                    <motion.div
+                      className="w-2 h-2 rounded-full bg-primary"
+                      animate={{ y: [0, -6, 0], opacity: [0.4, 1, 0.4] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: 0 }}
+                    />
+                    <motion.div
+                      className="w-2 h-2 rounded-full bg-primary"
+                      animate={{ y: [0, -6, 0], opacity: [0.4, 1, 0.4] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: 0.15 }}
+                    />
+                    <motion.div
+                      className="w-2 h-2 rounded-full bg-primary"
+                      animate={{ y: [0, -6, 0], opacity: [0.4, 1, 0.4] }}
+                      transition={{ duration: 0.8, repeat: Infinity, delay: 0.3 }}
+                    />
+                  </div>
+                  <span className="text-sm text-muted-foreground ml-2">Thinking...</span>
                 </div>
               </div>
             </motion.div>
@@ -447,24 +474,42 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
           </motion.div>
         </div>
 
-        {/* Voice Status */}
+        {/* Voice Status with Wave Animation */}
         <AnimatePresence>
           {isListening && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="mt-3 text-center"
+              className="mt-3"
             >
-              <p className="text-xs text-destructive flex items-center justify-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
-                Listening... Speak now
-              </p>
+              <div className="flex items-center justify-center gap-3 py-2">
+                {/* Voice wave visualization */}
+                <div className="flex items-center gap-0.5 h-6">
+                  {[...Array(7)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="w-1 bg-destructive rounded-full"
+                      animate={{
+                        height: [4 + Math.random() * 4, 12 + Math.random() * 8, 4 + Math.random() * 4]
+                      }}
+                      transition={{
+                        duration: 0.4 + Math.random() * 0.2,
+                        repeat: Infinity,
+                        delay: i * 0.05,
+                      }}
+                    />
+                  ))}
+                </div>
+                <p className="text-xs text-destructive font-medium">
+                  Listening... Speak now
+                </p>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
-    </>
+    </LayoutGroup>
   );
 };
 

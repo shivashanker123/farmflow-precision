@@ -16,6 +16,8 @@ import SensorCard from '@/components/farm/SensorCard';
 import { useFarm } from '@/contexts/FarmContext';
 import { useESP32Data, ESP32_CONFIG } from '@/hooks/useESP32Data';
 import { Calendar, Sun, Cloud, Thermometer, MapPin, Navigation, Edit3, Loader2, Check, X, CloudRain, CloudSnow, CloudLightning, CloudFog, Wifi, Settings } from 'lucide-react';
+import WeatherIcon from '@/components/ui/WeatherIcon';
+import WeatherCard from '@/components/ui/WeatherCard';
 
 // WorldWeatherOnline API configuration
 const WEATHER_API_KEY = '6c18236020184628a3d121913261001';
@@ -50,7 +52,11 @@ const Dashboard = () => {
   // ESP32 integration
   const esp32Data = useESP32Data(farmData.espIP);
 
-  // Sync ESP32 data with farm context
+  // Track previous live state to prevent flickering
+  const [stableIsLive, setStableIsLive] = useState(false);
+  const liveStateDebounceRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  // Sync ESP32 data with farm context (with debounce for isLive state)
   useEffect(() => {
     if (esp32Data.sensorData) {
       updateSensorData({
@@ -58,8 +64,23 @@ const Dashboard = () => {
         temperature: esp32Data.sensorData.temperature,
         humidity: esp32Data.sensorData.humidity,
       });
-      setDataSource(esp32Data.isLive ? 'live' : 'fallback');
+
+      // Debounce the isLive state changes to prevent flickering
+      if (liveStateDebounceRef.current) {
+        clearTimeout(liveStateDebounceRef.current);
+      }
+
+      liveStateDebounceRef.current = setTimeout(() => {
+        setStableIsLive(esp32Data.isLive);
+        setDataSource(esp32Data.isLive ? 'live' : 'fallback');
+      }, 1000); // Wait 1 second before changing live state
     }
+
+    return () => {
+      if (liveStateDebounceRef.current) {
+        clearTimeout(liveStateDebounceRef.current);
+      }
+    };
   }, [esp32Data.sensorData, esp32Data.isLive]);
 
   // Location state
@@ -85,72 +106,75 @@ const Dashboard = () => {
   });
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState<string | null>(null);
+  const [weatherLoaded, setWeatherLoaded] = useState(false); // Stays true after first successful load
+
+  // Fetch weather function (extracted for reuse)
+  const fetchWeather = useCallback(async (location: { lat: number; lng: number }) => {
+    console.log('Fetching weather for location:', location);
+    setWeatherLoading(true);
+    setWeatherError(null);
+
+    const url = `${WEATHER_BASE_URL}?key=${WEATHER_API_KEY}&q=${location.lat},${location.lng}&format=json&num_of_days=1`;
+
+    try {
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.data?.error) {
+        throw new Error(data.data.error[0]?.msg || 'API Error');
+      }
+
+      const current = data.data.current_condition[0];
+      const newWeatherData = {
+        temperature: parseInt(current.temp_C),
+        condition: current.weatherDesc[0].value,
+        humidity: parseInt(current.humidity),
+        icon: current.weatherCode,
+      };
+
+      setWeatherData(newWeatherData);
+      setWeatherLoaded(true); // Mark as loaded - stays true forever
+      console.log('Weather updated at:', new Date().toLocaleTimeString());
+
+      // Check for rain conditions (mock prediction)
+      const isRainy = current.weatherDesc[0].value.toLowerCase().includes('rain');
+      setRainExpected(isRainy);
+    } catch (error) {
+      console.error('Weather fetch error:', error);
+      setWeatherError('Failed to load weather');
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, [setRainExpected]);
 
   // Fetch weather data when location changes + refresh every 1 hour
   useEffect(() => {
-    const fetchWeather = async () => {
-      if (!userLocation) {
-        console.log('No user location set yet');
-        return;
-      }
+    if (!userLocation) {
+      console.log('No user location set yet');
+      return;
+    }
 
-      console.log('Fetching weather for location:', userLocation);
-      setWeatherLoading(true);
-      setWeatherError(null);
-
-      const url = `${WEATHER_BASE_URL}?key=${WEATHER_API_KEY}&q=${userLocation.lat},${userLocation.lng}&format=json&num_of_days=1`;
-
-      try {
-        const response = await fetch(url);
-
-        if (!response.ok) {
-          throw new Error(`API Error: ${response.status}`);
-        }
-
-        const data = await response.json();
-
-        if (data.data?.error) {
-          throw new Error(data.data.error[0]?.msg || 'API Error');
-        }
-
-        const current = data.data.current_condition[0];
-        const newWeatherData = {
-          temperature: parseInt(current.temp_C),
-          condition: current.weatherDesc[0].value,
-          humidity: parseInt(current.humidity),
-          icon: current.weatherCode,
-        };
-
-        setWeatherData(newWeatherData);
-        console.log('Weather updated at:', new Date().toLocaleTimeString());
-
-        // Check for rain conditions (mock prediction)
-        const isRainy = current.weatherDesc[0].value.toLowerCase().includes('rain');
-        setRainExpected(isRainy);
-      } catch (error) {
-        console.error('Weather fetch error:', error);
-        setWeatherError('Failed to load weather');
-      } finally {
-        setWeatherLoading(false);
-      }
-    };
-
-    // Initial fetch
-    fetchWeather();
+    // Initial fetch when location changes
+    fetchWeather(userLocation);
 
     // Set up hourly refresh (1 hour = 3600000 ms)
     // This ensures max 24 API calls per day, well within 100 free calls limit
     const REFRESH_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
     const intervalId = setInterval(() => {
       console.log('Hourly weather refresh triggered');
-      fetchWeather();
+      fetchWeather(userLocation);
     }, REFRESH_INTERVAL);
 
     // Cleanup interval on unmount or location change
     return () => {
       clearInterval(intervalId);
     };
-  }, [userLocation]);
+  }, [userLocation, fetchWeather]);
 
   // Auto-detect location on component mount
   useEffect(() => {
@@ -311,7 +335,7 @@ const Dashboard = () => {
 
             {/* Data Source Badge */}
             <DataSourceBadge
-              isLive={esp32Data.isLive}
+              isLive={stableIsLive}
               lastUpdated={esp32Data.lastUpdated}
               isLoading={esp32Data.isLoading}
             />
@@ -319,12 +343,12 @@ const Dashboard = () => {
 
           {/* Weather Widget with Location & ESP Settings */}
           <div className="flex items-center gap-3">
-            <div className={`glass-card px-6 py-3 flex items-center gap-6 transition-opacity duration-300 ${weatherLoading ? 'opacity-70' : ''}`}>
+            <div className="glass-card px-6 py-3 flex items-center gap-6">
               <div className="flex items-center gap-2">
-                {weatherLoading ? (
+                {!weatherLoaded && weatherLoading ? (
                   <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
                 ) : (
-                  getWeatherIcon()
+                  <WeatherIcon condition={weatherData.condition} size="md" />
                 )}
                 <span className="font-medium">{weatherData.temperature}°C</span>
               </div>
@@ -548,13 +572,13 @@ const Dashboard = () => {
             type="temperature"
             value={weatherData.temperature}
             unit="°C"
-            isLive={!weatherLoading && userLocation !== null}
+            isLive={weatherLoaded}
           />
           <SensorCard
             type="humidity"
             value={weatherData.humidity}
             unit="%"
-            isLive={!weatherLoading && userLocation !== null}
+            isLive={weatherLoaded}
           />
         </motion.div>
 
@@ -574,17 +598,118 @@ const Dashboard = () => {
 
         {/* Main Content Grid */}
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Trust Gauge */}
+          {/* Trust Gauge + Weather Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
+            className="space-y-4"
           >
             <SoilMoistureGauge
               value={farmData.soilMoisture}
               cropType={farmData.cropType}
               sensorOnline={farmData.sensorOnline}
             />
+
+            {/* Compact Weather Card */}
+            <motion.div
+              className="glass-card p-4 relative overflow-hidden"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              {/* Ambient background based on weather */}
+              <div className={`absolute inset-0 ${weatherData.condition.toLowerCase().includes('sun') || weatherData.condition.toLowerCase().includes('clear')
+                ? 'bg-gradient-to-br from-amber-500/15 via-orange-400/10 to-yellow-300/5'
+                : weatherData.condition.toLowerCase().includes('rain')
+                  ? 'bg-gradient-to-br from-blue-600/15 via-slate-500/10 to-cyan-400/5'
+                  : 'bg-gradient-to-br from-sky-500/10 via-blue-400/5 to-cyan-300/5'
+                }`} />
+
+              {/* Rain drops ambient effect */}
+              {weatherData.condition.toLowerCase().includes('rain') && (
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  {[...Array(6)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="absolute w-0.5 h-4 bg-gradient-to-b from-blue-400/50 to-transparent rounded-full"
+                      style={{ left: `${(i * 16) + 5}%` }}
+                      initial={{ top: '-10%', opacity: 0 }}
+                      animate={{ top: '110%', opacity: [0, 0.6, 0] }}
+                      transition={{
+                        duration: 0.8,
+                        repeat: Infinity,
+                        delay: Math.random() * 1.5,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
+              <div className="relative z-10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {/* Animated Weather Icon */}
+                    <motion.div
+                      className="p-2 rounded-xl bg-background/50"
+                      animate={{ scale: [1, 1.05, 1] }}
+                      transition={{ duration: 3, repeat: Infinity }}
+                    >
+                      <WeatherIcon condition={weatherData.condition} size="lg" />
+                    </motion.div>
+
+                    <div>
+                      <motion.p
+                        className="text-3xl font-display font-bold text-foreground"
+                        key={weatherData.temperature}
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        transition={{ type: 'spring', stiffness: 200 }}
+                      >
+                        {weatherData.temperature}°C
+                      </motion.p>
+                      <p className="text-sm text-muted-foreground">{weatherData.condition}</p>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <Thermometer className="w-4 h-4 text-secondary" />
+                      <span>{weatherData.humidity}%</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {userLocation ? `${userLocation.lat.toFixed(1)}°, ${userLocation.lng.toFixed(1)}°` : 'No location'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* 5-Day Forecast Mini */}
+                <div className="mt-4 pt-3 border-t border-border/50">
+                  <div className="grid grid-cols-5 gap-2">
+                    {[
+                      { day: 'Mon', temp: weatherData.temperature + 1, condition: weatherData.condition },
+                      { day: 'Tue', temp: weatherData.temperature - 1, condition: 'Partly Cloudy' },
+                      { day: 'Wed', temp: weatherData.temperature - 3, condition: 'Rain' },
+                      { day: 'Thu', temp: weatherData.temperature + 2, condition: 'Sunny' },
+                      { day: 'Fri', temp: weatherData.temperature, condition: 'Cloudy' },
+                    ].map((day, idx) => (
+                      <motion.div
+                        key={day.day}
+                        className="text-center py-1.5 px-1 rounded-lg bg-background/30 hover:bg-background/50 transition-all cursor-default"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 + idx * 0.08 }}
+                        whileHover={{ scale: 1.05, y: -2 }}
+                      >
+                        <p className="text-xs font-medium text-muted-foreground">{day.day}</p>
+                        <WeatherIcon condition={day.condition} size="sm" className="mx-auto my-1" />
+                        <p className="text-xs font-bold text-foreground">{day.temp}°</p>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>
 
           {/* Irrigation Control & Motor Control */}
@@ -601,7 +726,7 @@ const Dashboard = () => {
               isLocked={pumpLockStatus.locked}
               lockReason={pumpLockStatus.reason}
               onToggle={handleMotorToggle}
-              isLive={esp32Data.isLive}
+              isLive={stableIsLive}
             />
 
             {/* Swipe to Irrigate */}

@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 // ESP32 Configuration
 export const ESP32_CONFIG = {
   IP: '192.168.4.1', // Default ESP32 AP mode IP - can be configured
   TIMEOUT: 3000, // 3 second timeout
-  POLL_INTERVAL: 5000, // Poll every 5 seconds
+  POLL_INTERVAL: 10000, // Poll every 10 seconds (increased for stability)
 };
 
 export interface SensorData {
@@ -21,36 +21,29 @@ export interface ESP32State {
   error: string | null;
 }
 
-interface FallbackWeatherData {
-  temperature: number;
-  humidity: number;
-}
-
-// Mock fallback weather API (in production, use actual weather API)
-const fetchFallbackWeather = async (): Promise<FallbackWeatherData> => {
-  // Simulate API call - in production connect to actual weather API
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return {
-    temperature: 28 + Math.random() * 5,
-    humidity: 60 + Math.random() * 20,
-  };
+// Stable fallback values (no random)
+const FALLBACK_DATA: SensorData = {
+  soilMoisture: 55,
+  temperature: 28,
+  humidity: 65,
 };
 
-// Last known values for fallback
-let lastKnownSoilMoisture = 55;
+// Last known values for persistence
+let lastKnownData: SensorData = { ...FALLBACK_DATA };
 
 export const useESP32Data = (espIP: string = ESP32_CONFIG.IP) => {
   const [state, setState] = useState<ESP32State>({
     isLive: false,
-    sensorData: {
-      soilMoisture: lastKnownSoilMoisture,
-      temperature: 28,
-      humidity: 65,
-    },
+    sensorData: lastKnownData,
     lastUpdated: null,
-    isLoading: true,
+    isLoading: false, // Start as not loading to prevent initial flicker
     error: null,
   });
+
+  // Track consecutive failures for stable state transitions
+  const failureCountRef = useRef(0);
+  const successCountRef = useRef(0);
+  const isInitializedRef = useRef(false);
 
   const fetchESP32Data = useCallback(async (): Promise<SensorData | null> => {
     const controller = new AbortController();
@@ -69,15 +62,15 @@ export const useESP32Data = (espIP: string = ESP32_CONFIG.IP) => {
       }
 
       const data = await response.json();
-      
-      // Update last known soil moisture
-      lastKnownSoilMoisture = data.soilMoisture ?? data.soil_moisture ?? 55;
 
-      return {
-        soilMoisture: lastKnownSoilMoisture,
-        temperature: data.temperature ?? data.temp ?? 28,
-        humidity: data.humidity ?? 65,
+      // Update last known data
+      lastKnownData = {
+        soilMoisture: data.soilMoisture ?? data.soil_moisture ?? lastKnownData.soilMoisture,
+        temperature: data.temperature ?? data.temp ?? lastKnownData.temperature,
+        humidity: data.humidity ?? lastKnownData.humidity,
       };
+
+      return lastKnownData;
     } catch (error) {
       clearTimeout(timeoutId);
       return null;
@@ -85,45 +78,53 @@ export const useESP32Data = (espIP: string = ESP32_CONFIG.IP) => {
   }, [espIP]);
 
   const fetchData = useCallback(async () => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    // Only show loading on initial fetch
+    if (!isInitializedRef.current) {
+      setState(prev => ({ ...prev, isLoading: true }));
+    }
 
-    // Try ESP32 first
     const esp32Data = await fetchESP32Data();
 
     if (esp32Data) {
-      // Live mode - ESP32 is reachable
-      setState({
-        isLive: true,
+      // Success - reset failure count, increment success count
+      failureCountRef.current = 0;
+      successCountRef.current++;
+
+      // Only switch to live after 2 consecutive successes (to prevent flicker)
+      const shouldBeLive = successCountRef.current >= 2;
+
+      setState(prev => ({
+        isLive: shouldBeLive,
         sensorData: esp32Data,
         lastUpdated: new Date(),
         isLoading: false,
         error: null,
-      });
+      }));
     } else {
-      // Fallback mode - use weather API + estimated soil moisture
-      try {
-        const weatherData = await fetchFallbackWeather();
-        
-        setState({
-          isLive: false,
-          sensorData: {
-            soilMoisture: lastKnownSoilMoisture, // Use last known or estimated
-            temperature: Math.round(weatherData.temperature),
-            humidity: Math.round(weatherData.humidity),
-          },
-          lastUpdated: new Date(),
-          isLoading: false,
-          error: 'ESP32 offline - using fallback data',
-        });
-      } catch (error) {
+      // Failure - increment failure count, reset success count
+      successCountRef.current = 0;
+      failureCountRef.current++;
+
+      // Only switch to fallback after 2 consecutive failures (to prevent flicker)
+      const shouldBeFallback = failureCountRef.current >= 2;
+
+      if (shouldBeFallback) {
         setState(prev => ({
           ...prev,
           isLive: false,
           isLoading: false,
-          error: 'All data sources unavailable',
+          error: 'ESP32 offline - using fallback data',
+        }));
+      } else {
+        // Keep previous state during transition period
+        setState(prev => ({
+          ...prev,
+          isLoading: false,
         }));
       }
     }
+
+    isInitializedRef.current = true;
   }, [fetchESP32Data]);
 
   // Initial fetch and polling
@@ -216,7 +217,7 @@ export const useMotorControl = (
     if (motorState.isLocked) return;
 
     setMotorState(prev => ({ ...prev, isLoading: true }));
-    
+
     const newState = !motorState.isOn;
     const success = await sendMotorCommand(newState);
 

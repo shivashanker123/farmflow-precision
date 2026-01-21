@@ -11,17 +11,17 @@ const WaterBudget = () => {
 
   const budgetStatus = getWaterBudgetStatus();
   const isBorewell = farmData.irrigationSource === 'borewell';
-  
+
   // Calculate values based on irrigation source
-  const remaining = isBorewell 
+  const remaining = isBorewell
     ? 0 // Borewell doesn't have remaining
     : farmData.tankCapacity - farmData.usedWater;
-  
+
   const totalUsed = isBorewell ? getTotalPumped() : farmData.usedWater;
-  const percentageUsed = isBorewell 
+  const percentageUsed = isBorewell
     ? (farmData.pumpRunTime / 8) * 100 // Based on 8hr max daily runtime
     : (farmData.usedWater / farmData.tankCapacity) * 100;
-  
+
   // Calculate savings (simulated - compared to traditional irrigation)
   const traditionalUsage = totalUsed * 1.4; // 40% more water traditionally
   const waterSaved = traditionalUsage - totalUsed;
@@ -48,8 +48,8 @@ const WaterBudget = () => {
         >
           <h1 className="text-3xl font-display font-bold text-foreground">Water Budget</h1>
           <p className="text-muted-foreground mt-1">
-            {isBorewell 
-              ? 'Track and optimize your groundwater usage' 
+            {isBorewell
+              ? 'Track and optimize your groundwater usage'
               : 'Track and optimize your water resource usage'}
           </p>
         </motion.div>
@@ -59,18 +59,16 @@ const WaterBudget = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className={`glass-card p-6 hover-lift border-l-4 ${
-            budgetStatus === 'high' ? 'border-l-success' :
+          className={`glass-card p-6 hover-lift border-l-4 ${budgetStatus === 'high' ? 'border-l-success' :
             budgetStatus === 'medium' ? 'border-l-warning' : 'border-l-destructive'
-          }`}
+            }`}
         >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Budget Status</p>
-              <h2 className={`text-2xl font-display font-bold capitalize ${
-                budgetStatus === 'high' ? 'text-success' :
+              <h2 className={`text-2xl font-display font-bold capitalize ${budgetStatus === 'high' ? 'text-success' :
                 budgetStatus === 'medium' ? 'text-warning' : 'text-destructive'
-              }`}>
+                }`}>
                 {getBudgetMessage()}
               </h2>
             </div>
@@ -118,18 +116,42 @@ const WaterBudget = () => {
             className="space-y-6"
           >
             {/* Water Saved */}
-            <div className="glass-card p-6 hover-lift">
+            <motion.div
+              className="glass-card p-6 hover-lift"
+              whileHover={{ scale: 1.02, y: -3 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-success/10 rounded-xl flex items-center justify-center">
-                  <Droplets className="w-6 h-6 text-success" />
-                </div>
+                <motion.div
+                  className="w-12 h-12 bg-success/10 rounded-xl flex items-center justify-center"
+                  animate={{
+                    boxShadow: [
+                      '0 0 0 0 rgba(34, 197, 94, 0)',
+                      '0 0 20px 5px rgba(34, 197, 94, 0.3)',
+                      '0 0 0 0 rgba(34, 197, 94, 0)',
+                    ]
+                  }}
+                  transition={{ duration: 3, repeat: Infinity }}
+                >
+                  <motion.div
+                    animate={{ rotate: [0, 10, -10, 0] }}
+                    transition={{ duration: 4, repeat: Infinity }}
+                  >
+                    <Droplets className="w-6 h-6 text-success" />
+                  </motion.div>
+                </motion.div>
                 <div>
                   <p className="text-sm text-muted-foreground">
                     {isBorewell ? 'Groundwater Saved' : 'Water Saved'}
                   </p>
-                  <p className="text-2xl font-display font-bold text-success">
+                  <motion.p
+                    className="text-2xl font-display font-bold text-success"
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 200, delay: 0.5 }}
+                  >
                     {(waterSaved / 1000).toFixed(1)} m³
-                  </p>
+                  </motion.p>
                 </div>
               </div>
               <div className="bg-success/10 rounded-xl p-4">
@@ -137,49 +159,81 @@ const WaterBudget = () => {
                   {isBorewell ? (
                     <>
                       Compared to traditional pumping schedules, you've saved approximately{' '}
-                      <span className="font-bold text-success">{waterSaved.toLocaleString()} liters</span>{' '}
+                      <motion.span
+                        className="font-bold text-success"
+                        animate={{ textShadow: ['0 0 0 transparent', '0 0 8px rgba(34, 197, 94, 0.5)', '0 0 0 transparent'] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        {waterSaved.toLocaleString()} liters
+                      </motion.span>{' '}
                       of groundwater by optimizing pump runtime.
                     </>
                   ) : (
                     <>
                       Compared to traditional irrigation schedules, you've saved approximately{' '}
-                      <span className="font-bold text-success">{waterSaved.toLocaleString()} liters</span>{' '}
+                      <motion.span
+                        className="font-bold text-success"
+                        animate={{ textShadow: ['0 0 0 transparent', '0 0 8px rgba(34, 197, 94, 0.5)', '0 0 0 transparent'] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        {waterSaved.toLocaleString()} liters
+                      </motion.span>{' '}
                       by skipping unnecessary irrigation cycles.
                     </>
                   )}
                 </p>
               </div>
-            </div>
+            </motion.div>
 
             {/* Efficiency Score */}
-            <div className="glass-card p-6 hover-lift">
+            <motion.div
+              className="glass-card p-6 hover-lift"
+              whileHover={{ scale: 1.02, y: -3 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+            >
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center">
+                <motion.div
+                  className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center"
+                  animate={{ rotate: [0, 360] }}
+                  transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+                >
                   <Target className="w-6 h-6 text-primary" />
-                </div>
+                </motion.div>
                 <div>
                   <p className="text-sm text-muted-foreground">Efficiency Score</p>
-                  <p className="text-2xl font-display font-bold text-primary">
+                  <motion.p
+                    className="text-2xl font-display font-bold text-primary"
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 200, delay: 0.6 }}
+                  >
                     {efficiencyScore}/100
-                  </p>
+                  </motion.p>
                 </div>
               </div>
-              
-              {/* Progress Bar */}
+
+              {/* Animated Progress Bar */}
               <div className="relative h-4 bg-muted rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${efficiencyScore}%` }}
-                  transition={{ duration: 1, ease: 'easeOut' }}
+                  transition={{ duration: 1.5, ease: 'easeOut', delay: 0.3 }}
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary to-secondary rounded-full"
+                />
+                {/* Shimmer effect on progress bar */}
+                <motion.div
+                  className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                  initial={{ left: '-33%' }}
+                  animate={{ left: '133%' }}
+                  transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
                 />
               </div>
               <p className="text-sm text-muted-foreground mt-3">
-                {isBorewell 
+                {isBorewell
                   ? 'Score based on pump runtime efficiency and optimal scheduling.'
                   : 'Score based on water budget adherence and optimal irrigation timing.'}
               </p>
-            </div>
+            </motion.div>
 
             {/* Usage Breakdown */}
             <div className="glass-card p-6 hover-lift">
@@ -224,12 +278,12 @@ const WaterBudget = () => {
                     {isBorewell ? 'Soil Type' : 'Est. Refill Date'}
                   </span>
                   <span className="font-medium text-foreground capitalize">
-                    {isBorewell 
+                    {isBorewell
                       ? farmData.soilType
                       : new Date(Date.now() + getRemainingDays() * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
+                        month: 'short',
+                        day: 'numeric',
+                      })}
                   </span>
                 </div>
               </div>

@@ -114,7 +114,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle })
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation - Stable hover effects */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item, index) => {
             const isActive = location.pathname === item.path;
@@ -129,12 +129,19 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle })
                   to={item.path}
                   onClick={() => window.innerWidth < 1024 && onToggle()}
                   title={isMinimized ? item.label : undefined}
-                  className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 ${isActive
+                  className={`relative flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-300 group ${isActive
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/80 hover:text-sidebar-accent-foreground'
                     } ${isMinimized ? 'justify-center' : ''}`}
                 >
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
+                  {/* Active indicator bar on left */}
+                  <div className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-0 bg-sidebar-primary-foreground rounded-r-full transition-all duration-300 ${isActive ? 'h-6' : 'group-hover:h-4'}`} />
+
+                  {/* Icon with simple scale on hover */}
+                  <div className={`transition-transform duration-200 ${!isActive ? 'group-hover:scale-110' : ''}`}>
+                    <item.icon className="w-5 h-5 flex-shrink-0" />
+                  </div>
+
                   <AnimatePresence mode="wait">
                     {!isMinimized && (
                       <motion.span
@@ -148,11 +155,10 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle })
                       </motion.span>
                     )}
                   </AnimatePresence>
+
+                  {/* Active dot indicator */}
                   {isActive && !isMinimized && (
-                    <motion.div
-                      layoutId="activeIndicator"
-                      className="ml-auto w-2 h-2 rounded-full bg-sidebar-primary-foreground"
-                    />
+                    <div className="ml-auto w-2 h-2 rounded-full bg-sidebar-primary-foreground" />
                   )}
                 </Link>
               </motion.div>
