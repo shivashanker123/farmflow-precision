@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { Mic, MicOff, Volume2, VolumeX, Send, Bot, User, Loader2, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
+import { Mic, MicOff, Send, Bot, User, Sparkles, Maximize2, Minimize2, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFarm } from '@/contexts/FarmContext';
+import LiveVoiceOverlay from './LiveVoiceOverlay';
 
 interface Message {
   id: string;
@@ -34,6 +35,7 @@ const ChatWidget = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(false);
+  const [isLiveModeEnabled, setIsLiveModeEnabled] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -409,6 +411,22 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
 
         {/* Input Area */}
         <div className="flex items-end gap-2">
+          {/* Live Mode Button - Speech to Speech */}
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsLiveModeEnabled(!isLiveModeEnabled)}
+              className={`rounded-xl h-12 w-12 transition-all duration-300 ${isLiveModeEnabled
+                ? 'bg-success/20 border-success text-success animate-pulse'
+                : 'hover:bg-success/10 hover:border-success hover:text-success'
+                }`}
+              title="Live Mode - Speech to Speech"
+            >
+              <Radio className="w-5 h-5" />
+            </Button>
+          </motion.div>
+
           {/* Microphone Button */}
           <motion.div whileTap={{ scale: 0.95 }}>
             <Button
@@ -419,23 +437,9 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
                 ? 'bg-destructive/10 border-destructive text-destructive animate-pulse'
                 : 'hover:bg-primary/10 hover:border-primary hover:text-primary'
                 }`}
+              title="Voice Input"
             >
               {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </Button>
-          </motion.div>
-
-          {/* Speaker Toggle */}
-          <motion.div whileTap={{ scale: 0.95 }}>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setIsSpeakerEnabled(!isSpeakerEnabled)}
-              className={`rounded-xl h-12 w-12 transition-all duration-300 ${isSpeakerEnabled
-                ? 'bg-primary/10 border-primary text-primary'
-                : 'hover:bg-primary/10 hover:border-primary hover:text-primary'
-                }`}
-            >
-              {isSpeakerEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
             </Button>
           </motion.div>
 
@@ -509,6 +513,12 @@ Keep responses under 3 sentences unless the user asks for detailed information.`
           )}
         </AnimatePresence>
       </motion.div>
+
+      {/* Live Voice Overlay */}
+      <LiveVoiceOverlay
+        isOpen={isLiveModeEnabled}
+        onClose={() => setIsLiveModeEnabled(false)}
+      />
     </LayoutGroup>
   );
 };

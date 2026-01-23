@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+/// <reference types="@react-three/fiber" />
 
 // Web Speech API TypeScript declarations
 interface SpeechRecognitionEvent extends Event {
